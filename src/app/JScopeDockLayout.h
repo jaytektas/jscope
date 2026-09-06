@@ -12,11 +12,23 @@
 #include <j/core/SceneGraph.h>
 
 #include <memory>
+#include <vector>
 
 inline namespace jf {
 
 class JScopeActions;
 class JScopeDriver;
+
+// A dock the View menu can switch on and off, paired with the area it belongs to.
+//
+// The home area is remembered rather than looked up, because by the time a dock is
+// switched back on it may have been torn out and re-docked somewhere else entirely,
+// or be nowhere at all. "Where it came from" is the only answer that stays true.
+struct JScopeDockToggle {
+    JDockWidget* dock{nullptr};
+    JDockHost*   home{nullptr};
+    const char*  title{nullptr};
+};
 
 // Places the control panels in the window's dock space, each in its own dock so
 // they can be tabbed, resized, moved between areas or torn off — a scope gets
@@ -45,6 +57,16 @@ public:
     // live instrument would be a control with nothing to control.
     void setReplayVisible(bool on);
 
+    // The docks the user may show or hide. Replay is deliberately absent: it is
+    // governed by whether a capture is open, and offering a switch that the next
+    // device change would silently overrule is worse than offering none.
+    const std::vector<JScopeDockToggle>& dockToggles() const { return m_toggles; }
+
+    // Hiding removes the dock from WHEREVER it currently is, which need not be its
+    // home area — a floated dock is still placed, just placed somewhere else.
+    void setDockVisible(const JScopeDockToggle& t, bool on);
+    static bool isDockVisible(const JScopeDockToggle& t) { return t.dock && t.dock->isPlaced(); }
+
 private:
     std::unique_ptr<JChannelPanel>  m_channelPanel;
     std::unique_ptr<JTimebasePanel> m_timebasePanel;
@@ -61,6 +83,7 @@ private:
     std::unique_ptr<JDockWidget> m_replayDock;
     JDockSpace*                  m_space{nullptr};
     bool                         m_replayVisible{false};
+    std::vector<JScopeDockToggle> m_toggles;
 };
 
 } // inline namespace jf

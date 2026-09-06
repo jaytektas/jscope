@@ -150,6 +150,11 @@ void JScopeApp::_wireFrameTiming() {
             _selectDevice();
         }
 
+        // Cheap enough to do every frame (five comparisons) and it is the only way
+        // the ticks stay honest: a dock can be closed by its own button or dropped
+        // nowhere, and neither route goes through the menu.
+        JScopeMenuBuilder::syncViewMenu();
+
         ++m_frameCount;
         m_frameMsAccum   += t.totalMs;
         m_buildMsAccum   += t.buildMs;

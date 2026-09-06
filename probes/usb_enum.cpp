@@ -5,8 +5,13 @@
 //     cmake --build build --target usb_enum && ./build/usb_enum
 //
 // The permission line is the point. "Device present but cannot be opened" is by
-// far the most common first failure with libusb, and it means a udev rule is
-// missing — not that the driver is broken.
+// far the most common first failure with libusb, and it means the device is not
+// reachable by this process — not that the driver is broken. On Linux that is a
+// missing udev rule; on Windows it is a device with no WinUSB binding.
+//
+// Run it with --all first. "Listed by --all but cannot be opened" and "not
+// listed at all" have completely different causes, and only the first is a
+// permissions or driver question.
 
 #include "usb/JUsbContext.h"
 #include "usb/JUsbDevice.h"
@@ -93,7 +98,16 @@ int main(int argc, char** argv) {
         }
     }
 
-    JLOGC("probe", JLogLevel::Info)
-        << (found ? "" : "no known instruments found — check the cables and the udev rules");
+    // The remedy differs by platform, and naming the wrong one sends someone
+    // hunting for a file that does not exist on their machine.
+    if (!found)
+        JLOGC("probe", JLogLevel::Info)
+#if defined(_WIN32)
+            << "no known instruments found — check the cable, and that WinUSB is bound to the "
+               "device (Zadig). Windows will not let libusb near a device with no driver, and the "
+               "1008C has no class driver of its own.";
+#else
+            << "no known instruments found — check the cables and the udev rules";
+#endif
     return 0;
 }

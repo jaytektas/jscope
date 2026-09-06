@@ -25,6 +25,12 @@ public:
     // at that point there is no instrument to ask, and the settings a scope has
     // are not knowable until it answers.
     static void refreshInstrumentMenu(JSceneGraph& graph, JScopeApp& app);
+
+    // Correct the View menu's dock ticks from what the window actually shows.
+    // Docks appear and disappear by routes the menu never hears about -- a dock's
+    // own close button, a tear-out dropped nowhere -- so the ticks are re-derived
+    // rather than remembered.
+    static void syncViewMenu();
 };
 
 } // inline namespace jf

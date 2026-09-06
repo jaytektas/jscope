@@ -72,9 +72,32 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
 
     m_space = &space;
 
+    // Built here, where each dock's home area is still in front of us. Replay is
+    // left out on purpose -- see dockToggles().
+    m_toggles = {
+        { m_channelDock.get(),     &space.right(),  "Channels" },
+        { m_timebaseDock.get(),    &space.left(),   "Timebase" },
+        { m_triggerDock.get(),     &space.left(),   "Trigger"  },
+        { m_cursorDock.get(),      &space.bottom(), "Cursors"  },
+        { m_measurementDock.get(), &space.bottom(), "Measure"  },
+    };
+
     JLOGC(JScopeLog::kUi, JLogLevel::Info)
         << "dock layout built: Channels right, Timebase+Trigger left, "
            "Measure+Cursors bottom (Replay hidden until a capture is open)";
+}
+
+void JScopeDockLayout::setDockVisible(const JScopeDockToggle& t, bool on) {
+    if (!t.dock || !t.home || on == isDockVisible(t)) return;
+    if (on) {
+        t.home->addDock(t.dock);
+    } else if (JDockHost* owner = t.dock->placedIn()) {
+        // Not t.home: a dock that was torn out and re-docked elsewhere is owned by
+        // whoever holds it now, and asking its home area to remove it would do nothing.
+        owner->removeDock(t.dock);
+    }
+    JLOGC(JScopeLog::kUi, JLogLevel::Info)
+        << "dock '" << t.title << "' " << (on ? "shown" : "hidden");
 }
 
 void JScopeDockLayout::setReplayVisible(bool on) {

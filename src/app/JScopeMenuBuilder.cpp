@@ -25,6 +25,15 @@ std::vector<std::unique_ptr<JMenu>>& menuStore() {
     return store;
 }
 
+// The View menu's dock entries, kept so their ticks can be corrected. A dock can
+// also be closed by its own X or dragged out and dropped nowhere, and a tick that
+// disagrees with the window is worse than no tick at all.
+struct JDockMenuEntry { JMenuItem* item; JScopeDockToggle toggle; };
+std::vector<JDockMenuEntry>& dockItems() {
+    static std::vector<JDockMenuEntry> items;
+    return items;
+}
+
 JMenu* newMenu(const std::string& title) {
     menuStore().push_back(std::make_unique<JMenu>(title));
     return menuStore().back().get();
@@ -246,6 +255,19 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
         app.traceView().resetViewWindow();
     });
 
+    // One checkable entry per dock. JMenuItem::activate() flips its own checked
+    // state BEFORE emitting, so the handler reads the state the user just asked
+    // for rather than having to invert it here.
+    for (const JScopeDockToggle& t : app.docks().dockToggles()) {
+        JMenuItem* item = view->add(graph, t.title);
+        item->setCheckable(true);
+        item->setChecked(JScopeDockLayout::isDockVisible(t));
+        item->onTriggered.connect([&app, t, item] {
+            app.docks().setDockVisible(t, item->isChecked());
+        });
+        dockItems().push_back({ item, t });
+    }
+
     window.menuBar().addMenu(file);
     window.menuBar().addMenu(acquire);
     window.menuBar().addMenu(device);
@@ -255,6 +277,11 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
     JLOGC(JScopeLog::kUi, JLogLevel::Debug) << "menu bar built (3 menus)";
 }
 
+
+void JScopeMenuBuilder::syncViewMenu() {
+    for (const JDockMenuEntry& e : dockItems())
+        e.item->setChecked(JScopeDockLayout::isDockVisible(e.toggle));
+}
 
 void JScopeMenuBuilder::refreshInstrumentMenu(JSceneGraph& graph, JScopeApp& app) {
     rebuildInstrumentMenu(graph, app);
