@@ -21,7 +21,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$ROOT/build-win"
-SDK="${JFRAMEWORK_WIN_SDK:-$HOME/jframework-sdk-win-new}"
+SDK="${JFRAMEWORK_WIN_SDK:-$HOME/jframework-sdk-win}"
 JF_SRC="${JFRAMEWORK_SRC:-$HOME/workspace/JFramework}"
 TOOLCHAIN="$JF_SRC/cmake/mingw-w64.cmake"
 
