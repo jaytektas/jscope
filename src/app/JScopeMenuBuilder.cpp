@@ -1,0 +1,258 @@
+#include "JScopeMenuBuilder.h"
+#include "JScopeApp.h"
+
+#include "JScopeActions.h"
+#include "scope/JScopeLog.h"
+#include "ui/JTraceView.h"
+
+#include <j/core/MainThreadDispatcher.h>
+
+#include <ctime>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
+
+inline namespace jf {
+
+namespace {
+
+// JAppWindow's menu bar stores raw JMenu pointers, so the menus must outlive the
+// builder call. They live here for the process lifetime, which is exactly as long
+// as the window that references them.
+std::vector<std::unique_ptr<JMenu>>& menuStore() {
+    static std::vector<std::unique_ptr<JMenu>> store;
+    return store;
+}
+
+JMenu* newMenu(const std::string& title) {
+    menuStore().push_back(std::make_unique<JMenu>(title));
+    return menuStore().back().get();
+}
+
+std::string timestampedName(const char* prefix, const char* extension) {
+    const std::time_t t = std::time(nullptr);
+    std::tm tm{};
+    localtime_r(&t, &tm);
+    char buf[64];
+    std::strftime(buf, sizeof buf, "%Y%m%d-%H%M%S", &tm);
+    return std::string(prefix) + "-" + buf + "." + extension;
+}
+
+// The most recently modified capture in the default directory. A file dialog is
+// the eventual answer, but "reopen what I just recorded" is the case that
+// actually comes up on a bench, and it needs no dialog at all.
+std::string newestCapture() {
+    namespace fs = std::filesystem;
+    const fs::path dir = JScopeApp::defaultCaptureDir();
+    std::error_code ec;
+    if (!fs::is_directory(dir, ec)) return {};
+
+    fs::path best;
+    fs::file_time_type bestTime{};
+    for (const auto& e : fs::directory_iterator(dir, ec)) {
+        if (!e.is_regular_file(ec) || e.path().extension() != ".jscope") continue;
+        const auto when = fs::last_write_time(e.path(), ec);
+        if (best.empty() || when > bestTime) { best = e.path(); bestTime = when; }
+    }
+    return best.string();
+}
+
+// The Device menu, kept so its device list can be rebuilt in place.
+JMenu*& deviceMenu() {
+    static JMenu* m = nullptr;
+    return m;
+}
+
+// Rebuild the WHOLE Device menu — fixed entries included. Enumerating on demand
+// rather than at startup is what lets a scope plugged in later be found.
+//
+// The whole menu, because JMenu offers clear() and nothing finer: there is no
+// way to drop the instrument entries and keep Scan above them.
+//
+// No Reconnect item. Picking the instrument from the list below does the same
+// thing and says which one, where Reconnect only ever meant "the last one" --
+// a second way to do the same thing, with less information in it.
+// Appending only the instruments, which is what this did before, meant every
+// scan added another copy of every device already listed.
+
+// THE INSTRUMENT'S OWN SETTINGS, whatever they happen to be.
+//
+// Built from what the driver publishes, so the shell never learns one scope's
+// vocabulary. A device with no settings of its own publishes none and the menu
+// is hidden entirely rather than shown empty.
+//
+// Rebuilt on open and after every change, because the instrument is allowed to
+// substitute a value it prefers and the tick has to follow what it did, not what
+// was asked.
+JMenu*& instrumentMenu() {
+    static JMenu* menu = nullptr;
+    return menu;
+}
+
+// The submenus this menu owns. Separate from menuStore(), which lives for the
+// life of the process: these are rebuilt every time a setting changes, and
+// pushing each rebuild's worth into a store that is never emptied would grow
+// without bound.
+std::vector<std::unique_ptr<JMenu>>& instrumentSubmenus() {
+    static std::vector<std::unique_ptr<JMenu>> store;
+    return store;
+}
+
+void rebuildInstrumentMenu(JSceneGraph& graph, JScopeApp& app) {
+    JMenu* menu = instrumentMenu();
+    if (!menu) return;
+
+    // Items first, THEN the submenus they point at. The other order would leave
+    // each item holding a pointer to a menu that had just been freed.
+    menu->clear();
+    instrumentSubmenus().clear();
+
+    JScopeDriver* d = app.session().driver();
+    const std::vector<JScopeOption> options = d ? d->instrumentOptions()
+                                                : std::vector<JScopeOption>{};
+    if (options.empty()) {
+        // Honest rather than empty: an instrument with no settings of its own is
+        // not a menu that failed to load.
+        menu->add(graph, "No settings on this instrument");
+        return;
+    }
+
+    for (const JScopeOption& o : options) {
+        instrumentSubmenus().push_back(std::make_unique<JMenu>(o.label));
+        JMenu* sub = instrumentSubmenus().back().get();
+
+        for (const std::string& v : o.values) {
+            // The instrument's own spelling, with the current one marked. No
+            // translation in either direction: what it answered is what it takes.
+            const std::string label = (v == o.current ? "* " : "   ") + v;
+            const std::string id = o.id;
+            sub->add(graph, label)->onTriggered.connect([&app, &graph, id, v] {
+                if (JScopeDriver* drv = app.session().driver())
+                    drv->setInstrumentOption(id, v);
+                // Deferred for the reason the device menu defers: this handler is
+                // inside an item the rebuild is about to destroy.
+                JMainThreadDispatcher::instance().post([&app, &graph] {
+                    rebuildInstrumentMenu(graph, app);
+                });
+            });
+        }
+        menu->add(graph, o.label, {}, sub);
+    }
+}
+
+void rebuildDeviceMenu(JSceneGraph& graph, JScopeApp& app) {
+    JMenu* menu = deviceMenu();
+    if (!menu) return;
+
+    menu->clear();
+
+    // DEFERRED. Rebuilding destroys every item in this menu, including the Scan
+    // item whose handler is running — clearing here would free the object the
+    // call is still inside. Posting it runs the rebuild on the next turn of the
+    // main loop, once the handler has returned.
+    menu->add(graph, "Scan for Devices")->onTriggered.connect([&app, &graph] {
+        JMainThreadDispatcher::instance().post([&app, &graph] {
+            rebuildDeviceMenu(graph, app);
+        });
+    });
+    menu->addSeparator(graph);
+
+    const auto devices = app.availableDevices();
+
+    for (const JScopeDeviceInfo& d : devices) {
+        // A tick against whichever is open, so the menu answers "what am I
+        // looking at" as well as "what else is there".
+        const bool current = (d.driverId == app.currentDevice().driverId &&
+                              d.portPath == app.currentDevice().portPath);
+        const std::string label = (current ? "* " : "   ") + d.displayName;
+        menu->add(graph, label)->onTriggered.connect([&app, d] {
+            JLOGC(JScopeLog::kUi, JLogLevel::Info) << "opening " << d.displayName;
+            app.openDevice(d);
+        });
+    }
+
+    JLOGC(JScopeLog::kUi, JLogLevel::Info)
+        << "device menu: " << devices.size() << " device(s) available, "
+        << menu->items().size() << " menu entries";
+}
+
+} // namespace
+
+void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp& app) {
+    JMenu* file = newMenu("File");
+
+    // Timestamped default names: a bench session produces many captures and
+    // being asked to name each one is friction at exactly the wrong moment.
+    file->add(graph, "Start Recording")->onTriggered.connect([&app] {
+        app.startRecording(JScopeApp::defaultCaptureDir() + "/" +
+                           timestampedName("capture", "jscope"));
+    });
+    file->add(graph, "Stop Recording")->onTriggered.connect([&app] {
+        app.stopRecording();
+    });
+    file->addSeparator(graph);
+    file->add(graph, "Open Last Capture")->onTriggered.connect([&app] {
+        const std::string latest = newestCapture();
+        if (latest.empty())
+            JLOGC(JScopeLog::kUi, JLogLevel::Warn)
+                << "no captures found in " << JScopeApp::defaultCaptureDir();
+        else
+            app.openCapture(latest);
+    });
+    file->add(graph, "Export CSV")->onTriggered.connect([&app] {
+        app.exportCsv(JScopeApp::defaultCaptureDir() + "/" +
+                      timestampedName("export", "csv"));
+    });
+    file->addSeparator(graph);
+    file->add(graph, "Quit")->onTriggered.connect([&window] {
+        JLOGC(JScopeLog::kUi, JLogLevel::Info) << "quit from the File menu";
+        window.requestClose();
+    });
+
+    // Every item goes through JScopeActions — the capability checks, the
+    // read-back after an apply, and the refusal message all live there, and a
+    // second copy here would be a second chance to forget one.
+    JScopeActions& a = app.actions();
+
+    JMenu* acquire = newMenu("Acquire");
+    acquire->add(graph, "Run")->onTriggered.connect([&a] { a.run(); });
+    acquire->add(graph, "Stop")->onTriggered.connect([&a] { a.stop(); });
+    acquire->add(graph, "Single")->onTriggered.connect([&a] { a.single(); });
+    acquire->addSeparator(graph);
+    acquire->add(graph, "Force Trigger")->onTriggered.connect([&a] { a.forceTrigger(); });
+    acquire->add(graph, "Autoset")->onTriggered.connect([&a] { a.autoset(); });
+
+    // Device: which instrument, and how to get back to it. Rebuilt from a live
+    // enumeration each time the menu is opened, so a scope plugged in after
+    // startup appears without a restart — and an instrument that dropped off the
+    // bus can be picked up again without one either.
+    JMenu* device = newMenu("Device");
+    deviceMenu() = device;
+    rebuildDeviceMenu(graph, app);   // fills in Scan and the devices
+
+    JMenu* instrument = newMenu("Instrument");
+    instrumentMenu() = instrument;
+    rebuildInstrumentMenu(graph, app);
+
+    JMenu* view = newMenu("View");
+    view->add(graph, "Reset Zoom")->onTriggered.connect([&app] {
+        JLOGC(JScopeLog::kUi, JLogLevel::Info) << "reset zoom";
+        app.traceView().resetViewWindow();
+    });
+
+    window.menuBar().addMenu(file);
+    window.menuBar().addMenu(acquire);
+    window.menuBar().addMenu(device);
+    window.menuBar().addMenu(instrument);
+    window.menuBar().addMenu(view);
+
+    JLOGC(JScopeLog::kUi, JLogLevel::Debug) << "menu bar built (3 menus)";
+}
+
+
+void JScopeMenuBuilder::refreshInstrumentMenu(JSceneGraph& graph, JScopeApp& app) {
+    rebuildInstrumentMenu(graph, app);
+}
+
+} // inline namespace jf

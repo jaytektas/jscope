@@ -1,0 +1,5 @@
+build/
+build-*/
+genesis.log
+genesis.log.*
+*.ppm

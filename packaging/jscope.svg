@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- JScope. Drawn in the application's own palette so the launcher icon and
+       the running window are recognisably the same instrument:
+       background rgb(16,18,22), graticule rgb(70,74,84), CH1 rgb(255,214,64),
+       CH2 rgb(64,214,255) — see src/ui/JScopeTheme.cpp. -->
+  <defs>
+    <clipPath id="screen">
+      <rect x="26" y="42" width="204" height="172" rx="10"/>
+    </clipPath>
+  </defs>
+
+  <rect x="8" y="24" width="240" height="208" rx="26" fill="#101216"/>
+  <rect x="8" y="24" width="240" height="208" rx="26" fill="none"
+        stroke="#585d68" stroke-width="5"/>
+
+  <g clip-path="url(#screen)">
+    <rect x="26" y="42" width="204" height="172" fill="#14161c"/>
+    <!-- Graticule: four divisions each way, which is as much as survives 32px. -->
+    <g stroke="#464a54" stroke-width="2" opacity="0.85">
+      <path d="M77 42V214M128 42V214M179 42V214"/>
+      <path d="M26 85H230M26 128H230M26 171H230"/>
+    </g>
+    <!-- CH1: a square wave, because that is what this instrument is pointed at
+         and because square corners stay legible when the icon is 24px wide. -->
+    <path d="M26 176 H60 V94 H94 V176 H128 V94 H162 V176 H196 V94 H230"
+          fill="none" stroke="#ffd640" stroke-width="11"
+          stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- CH2 sits low and thin: it says "more than one channel" without
+         competing with CH1 for the eye. -->
+    <path d="M26 200 H196 V150 H230"
+          fill="none" stroke="#40d6ff" stroke-width="6"
+          stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>
+  </g>
+
+  <rect x="26" y="42" width="204" height="172" rx="10" fill="none"
+        stroke="#585d68" stroke-width="4"/>
+</svg>
