@@ -40,7 +40,9 @@ void configureLogging(int argc, char** argv) {
 // anything to the running process.
 //
 //   kill -USR1 $(pgrep jscope)   ->  /tmp/jscope_shot_<surface>.ppm
+#if defined(SIGUSR1)
 void onCaptureSignal(int) { JAppWindow::s_captureRequest.store(true); }
+#endif
 
 // Ctrl-C or a SIGTERM should close the window the same way the close button
 // does, so the instrument setup is written out instead of lost.
@@ -52,7 +54,12 @@ int main(int argc, char** argv) {
     configureLogging(argc, argv);
 
     JAppWindow::s_capturePath = "/tmp/jscope_shot";
+    // SIGUSR1 is POSIX. Windows has no user-defined signals, so the frame grab
+    // simply has no trigger there; Ctrl-C and a terminate request still close
+    // the window the same way the close button does.
+#if defined(SIGUSR1)
     std::signal(SIGUSR1, onCaptureSignal);
+#endif
     std::signal(SIGINT,  onTerminateSignal);
     std::signal(SIGTERM, onTerminateSignal);
 

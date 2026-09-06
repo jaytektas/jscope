@@ -33,7 +33,12 @@ JMenu* newMenu(const std::string& title) {
 std::string timestampedName(const char* prefix, const char* extension) {
     const std::time_t t = std::time(nullptr);
     std::tm tm{};
+    // Same call, opposite argument order, different name on each platform.
+#if defined(_WIN32)
+    localtime_s(&tm, &t);
+#else
     localtime_r(&t, &tm);
+#endif
     char buf[64];
     std::strftime(buf, sizeof buf, "%Y%m%d-%H%M%S", &tm);
     return std::string(prefix) + "-" + buf + "." + extension;

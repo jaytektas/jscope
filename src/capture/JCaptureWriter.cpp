@@ -25,8 +25,15 @@ namespace {
 std::string nowUtcIso8601() {
     const auto now = std::chrono::system_clock::now();
     const std::time_t t = std::chrono::system_clock::to_time_t(now);
+    // Both spellings of the same thing: gmtime_r is POSIX, gmtime_s is what the
+    // Windows CRT provides, and plain gmtime returns a shared static that a
+    // second thread can overwrite between the call and the strftime.
     std::tm tm{};
+#if defined(_WIN32)
+    gmtime_s(&tm, &t);
+#else
     gmtime_r(&t, &tm);
+#endif
     char buf[32];
     std::strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", &tm);
     return buf;

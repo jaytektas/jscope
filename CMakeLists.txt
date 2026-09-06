@@ -12,14 +12,41 @@ add_custom_target(scope_tests COMMENT "build every scope test binary")
 #   cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=$HOME/jframework-sdk
 find_package(JFramework 0.1 CONFIG REQUIRED)
 # libj_platform.a is a static archive, so it exports none of its own private
-# dependencies — JHttpClient's OpenSSL among them. The application links them.
-find_package(OpenSSL REQUIRED)
+# dependencies — JHttpClient's OpenSSL among them. The application links them
+# WHERE THEY EXIST: a static archive only yields the objects something actually
+# references, and this application never calls JHttpClient, so on a target
+# without OpenSSL the link simply does not need it. Required would make a
+# cross-build fail for a dependency it does not use.
+find_package(OpenSSL)
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
 # The app's first hard third-party runtime dependency. It is unavoidable: the
 # 1008C is a vendor-specific device with no kernel driver, and there is no route
 # to it short of usbfs ioctls, which is reimplementing libusb badly.
-pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
+# Windows has no pkg-config for it, so the paths are given directly there; on
+# Linux pkg-config knows.
+if(WIN32)
+    if(NOT LIBUSB_WIN_INCLUDE_DIR OR NOT LIBUSB_WIN_LIBRARY)
+        message(FATAL_ERROR
+            "cross-compiling needs libusb: pass -DLIBUSB_WIN_INCLUDE_DIR and "
+            "-DLIBUSB_WIN_LIBRARY pointing at a MinGW build of libusb-1.0")
+    endif()
+    add_library(libusb_target INTERFACE)
+    target_include_directories(libusb_target INTERFACE ${LIBUSB_WIN_INCLUDE_DIR})
+    target_link_libraries(libusb_target INTERFACE ${LIBUSB_WIN_LIBRARY})
+    add_library(PkgConfig::LIBUSB ALIAS libusb_target)
+
+    # The GCC runtime goes INSIDE the binary. A MinGW link leaves imports on
+    # libgcc_s_seh-1.dll, libstdc++-6.dll and libwinpthread-1.dll, which live in
+    # the cross toolchain and are not on any Windows machine -- the .exe refuses
+    # to start with "Importing dlls ... failed" and names no useful culprit. The
+    # instrument is carried to a vehicle on a laptop, so what has to come out of
+    # this build is ONE file that runs, not a file plus three DLLs that have to
+    # be found and kept beside it.
+    add_link_options(-static-libgcc -static-libstdc++ -static)
+else()
+    pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
+endif()
 
 file(GLOB SCOPE_USB_SRC     CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/usb/*.cpp)
 file(GLOB SCOPE_HAL_SRC     CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/scope/*.cpp)
@@ -75,9 +102,16 @@ target_precompile_headers(scope_ui PRIVATE ${SCOPE_PCH_UI})
 function(scope_app name entry driver_src app_dir)
     add_executable(${name} ${entry} ${driver_src} ${SCOPE_SHELL_SRC})
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${app_dir})
-    target_link_libraries(${name} PRIVATE scope_ui scope_core JFramework::platform xcb
-                                          PkgConfig::LIBUSB
-                                          OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
+    target_link_libraries(${name} PRIVATE scope_ui scope_core JFramework::platform
+                                          PkgConfig::LIBUSB Threads::Threads)
+    # WM_CLASS is an X11 property, so the code that sets it and the library it
+    # needs belong to the Linux build alone.
+    if(NOT WIN32)
+        target_link_libraries(${name} PRIVATE xcb)
+    endif()
+    if(OPENSSL_FOUND)
+        target_link_libraries(${name} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    endif()
     target_precompile_headers(${name} PRIVATE ${SCOPE_PCH_UI})
 endfunction()
 
@@ -96,8 +130,10 @@ function(scope_probe name)
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
                                                ${CMAKE_CURRENT_SOURCE_DIR}/apps/scope1008)
     target_link_libraries(${name} PRIVATE scope_core JFramework::platform
-                                          PkgConfig::LIBUSB
-                                          OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
+                                          PkgConfig::LIBUSB Threads::Threads)
+    if(OPENSSL_FOUND)
+        target_link_libraries(${name} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    endif()
 endfunction()
 
 scope_probe(usb_enum)
@@ -112,8 +148,10 @@ function(scope_test name)
                                                ${CMAKE_CURRENT_SOURCE_DIR}/tests
                                                ${CMAKE_CURRENT_SOURCE_DIR}/apps/scope1008)
     target_link_libraries(${name} PRIVATE scope_core JFramework::platform
-                                          PkgConfig::LIBUSB
-                                          OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
+                                          PkgConfig::LIBUSB Threads::Threads)
+    if(OPENSSL_FOUND)
+        target_link_libraries(${name} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    endif()
     add_dependencies(scope_tests ${name})
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
