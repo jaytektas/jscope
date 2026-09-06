@@ -130,6 +130,53 @@ bool JScopeActions::applyTrigger(const JScopeTriggerConfig& cfg) {
     return true;
 }
 
+JPatternGenerator* JScopeActions::patternGenerator() {
+    JScopeDriver* d = m_session.driver();
+    if (!d) return nullptr;
+    JScopeGenerator* g = d->generator();
+    // A driver may publish a DDS instead, and a static_cast on the wrong kind
+    // would be undefined rather than merely wrong. The kind is the discriminant.
+    if (!g || g->kind() != JScopeGeneratorKind::DigitalPattern) return nullptr;
+    return static_cast<JPatternGenerator*>(g);
+}
+
+const JPatternGenerator* JScopeActions::patternGenerator() const {
+    return const_cast<JScopeActions*>(this)->patternGenerator();
+}
+
+bool JScopeActions::setGeneratorOutput(bool on) {
+    JPatternGenerator* g = patternGenerator();
+    if (!g) { onRefused.emit("this device has no pattern generator"); return false; }
+    if (!g->setOutputEnabled(on)) {
+        onRefused.emit("the generator refused to switch its output");
+        return false;
+    }
+    onConfigChanged.emit();
+    return true;
+}
+
+bool JScopeActions::setGeneratorRpm(uint32_t rpm) {
+    JPatternGenerator* g = patternGenerator();
+    if (!g) { onRefused.emit("this device has no pattern generator"); return false; }
+    if (!g->setRpm(rpm)) {
+        onRefused.emit("the generator refused that speed");
+        return false;
+    }
+    onConfigChanged.emit();
+    return true;
+}
+
+bool JScopeActions::setGeneratorPattern(const std::vector<uint8_t>& pattern) {
+    JPatternGenerator* g = patternGenerator();
+    if (!g) { onRefused.emit("this device has no pattern generator"); return false; }
+    if (!g->setPattern(pattern)) {
+        onRefused.emit("the generator refused that pattern");
+        return false;
+    }
+    onConfigChanged.emit();
+    return true;
+}
+
 bool JScopeActions::setAcquisitionMode(JScopeAcquisitionMode mode) {
     if (!_requireDriver("Acquisition mode")) return false;
     JScopeDriver* d = m_session.driver();

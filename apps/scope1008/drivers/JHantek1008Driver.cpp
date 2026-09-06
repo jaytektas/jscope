@@ -188,13 +188,13 @@ void JHantek1008Driver::_buildCapabilities() {
     m_caps.hasAutoset         = true;
 
     // The 1008C's generator is an eight-line digital pattern driven in RPM — a
-    // crank simulator, not a DDS. Declared so the right panel could be built,
-    // but not implemented in this phase.
-    m_caps.generator.kind = JScopeGeneratorKind::DigitalPattern;
-    m_caps.generator.patternOutputs   = 8;
-    m_caps.generator.maxPatternLength = 1440;
-    m_caps.generator.minRpm = 1;
-    m_caps.generator.maxRpm = 750000;
+    // crank simulator, not a DDS.
+    //
+    // Taken FROM the generator rather than restated here. The two used to
+    // disagree: this said 1440 steps, which is what the device holds, while the
+    // driver can only write the 62 that fit one packet — and the UI builds itself
+    // from these numbers, so it would have offered a length that could not be sent.
+    m_caps.generator = m_generator.capabilities();
 }
 
 std::vector<uint8_t> JHantek1008Driver::_activeChannels() const {
@@ -236,6 +236,7 @@ bool JHantek1008Driver::open(const JScopeDeviceInfo& device) {
 
     m_protocol = std::make_unique<JHantek1008Protocol>(
         m_usb, m_usb.bulkOutEndpoint(), m_usb.bulkInEndpoint());
+    m_generator.attach(m_protocol.get());
 
     m_caps.serialNumber = device.serialNumber;
 
@@ -270,6 +271,18 @@ bool JHantek1008Driver::open(const JScopeDeviceInfo& device) {
     m_pool.provision(JHantek1008Tables::kChannelCount,
                      std::max(kMaxBurstSamplesPerChannel, kMaxRollSamplesPerChannel));
     m_open = true;
+
+    // Push the generator's remembered state. Unlike a bench scope, the 1008C holds
+    // NO configuration of its own -- it has no front panel and nothing survives a
+    // replug -- so the application's state is the only version there is, and
+    // pushing it here is not the same thing as overwriting a user's settings.
+    //
+    // The output follows what it was, which is off unless it was deliberately
+    // switched on: connecting a scope must not start driving eight wires.
+    if (!m_generator.reapply())
+        JLOGC(JScopeLog::kHantek, JLogLevel::Warn)
+            << "generator setup was not accepted: " << m_generator.lastError();
+
     _setState(JScopeState::Idle);
     JLOGC(JScopeLog::kHantek, JLogLevel::Info) << "1008C ready";
     return true;
@@ -439,6 +452,9 @@ bool JHantek1008Driver::_applyConfigToDevice() {
 void JHantek1008Driver::close() {
     if (!m_open) return;
     stop();
+    // Detach BEFORE the protocol dies: the generator holds a raw pointer to it and
+    // would otherwise be left aimed at freed memory until the next open.
+    m_generator.attach(nullptr);
     m_usb.close();
     m_protocol.reset();
     m_open = false;

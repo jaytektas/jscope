@@ -27,6 +27,7 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
     m_measurementPanel = std::make_unique<JMeasurementPanel>(graph);
     m_cursorPanel      = std::make_unique<JCursorPanel>(graph, cursors);
     m_replayBar        = std::make_unique<JReplayBar>(graph);
+    m_generatorPanel   = std::make_unique<JGeneratorPanel>(graph, actions);
 
     m_channelDock  = std::make_unique<JDockWidget>("Channels",  0.f, 0.f, kDockWidth, kDockHeight);
     m_timebaseDock = std::make_unique<JDockWidget>("Timebase",  0.f, 0.f, kDockWidth, kDockHeight);
@@ -34,6 +35,7 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
     m_measurementDock = std::make_unique<JDockWidget>("Measure", 0.f, 0.f, kDockWidth, kDockHeight);
     m_cursorDock      = std::make_unique<JDockWidget>("Cursors", 0.f, 0.f, kDockWidth, kDockHeight);
     m_replayDock      = std::make_unique<JDockWidget>("Replay",  0.f, 0.f, kDockWidth, kDockHeight);
+    m_generatorDock   = std::make_unique<JDockWidget>("Generator", 0.f, 0.f, kDockWidth, kDockHeight);
 
     m_channelDock->setMinSize(kDockMinWidth, kDockMinHeight);
     m_timebaseDock->setMinSize(kDockMinWidth, kDockMinHeight);
@@ -41,6 +43,7 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
     m_measurementDock->setMinSize(kDockMinWidth, kDockMinHeight);
     m_cursorDock->setMinSize(kDockMinWidth, kDockMinHeight);
     m_replayDock->setMinSize(kDockMinWidth, kDockMinHeight);
+    m_generatorDock->setMinSize(kDockMinWidth, kDockMinHeight);
 
     m_channelDock->setContent(m_channelPanel.get());
     m_timebaseDock->setContent(m_timebasePanel.get());
@@ -48,6 +51,7 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
     m_measurementDock->setContent(m_measurementPanel.get());
     m_cursorDock->setContent(m_cursorPanel.get());
     m_replayDock->setContent(m_replayBar.get());
+    m_generatorDock->setContent(m_generatorPanel.get());
 
     JDockSpace& space = window.dockSpace();
     space.setRightWidth(kRightAreaWidth);
@@ -59,6 +63,9 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
     space.right().addDock(m_channelDock.get());
     space.left().addDock(m_timebaseDock.get());
     space.left().addDock(m_triggerDock.get());     // second dock in an area tabs
+    // The generator tabs alongside them: it is set once for a test and then left,
+    // so it wants to be reachable rather than permanently on screen.
+    space.left().addDock(m_generatorDock.get());
 
     // Measure and Cursors go together at the bottom: they are read side by side
     // while probing, and they are the two panels that want horizontal room for
@@ -80,6 +87,7 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
         { m_triggerDock.get(),     &space.left(),   "Trigger"  },
         { m_cursorDock.get(),      &space.bottom(), "Cursors"  },
         { m_measurementDock.get(), &space.bottom(), "Measure"  },
+        { m_generatorDock.get(),   &space.left(),   "Generator" },
     };
 
     JLOGC(JScopeLog::kUi, JLogLevel::Info)
@@ -111,6 +119,7 @@ void JScopeDockLayout::setReplayVisible(bool on) {
 
 void JScopeDockLayout::rebuild(const JScopeCapabilities& caps) {
     m_channelPanel->rebuild(caps);
+    m_generatorPanel->rebuild(caps);
     m_timebasePanel->rebuild(caps);
     m_triggerPanel->rebuild(caps);
     m_measurementPanel->rebuild(caps);
@@ -118,6 +127,7 @@ void JScopeDockLayout::rebuild(const JScopeCapabilities& caps) {
 }
 
 void JScopeDockLayout::syncFrom(const JScopeDriver& driver) {
+    m_generatorPanel->syncFrom(driver);
     m_channelPanel->syncFrom(driver);
     m_timebasePanel->syncFrom(driver);
     m_triggerPanel->syncFrom(driver);

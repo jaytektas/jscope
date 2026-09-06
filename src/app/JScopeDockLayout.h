@@ -2,6 +2,7 @@
 
 #include "ui/JChannelPanel.h"
 #include "ui/JCursorPanel.h"
+#include "ui/JGeneratorPanel.h"
 #include "ui/JMeasurementPanel.h"
 #include "ui/JReplayBar.h"
 #include "ui/JTimebasePanel.h"
@@ -52,6 +53,7 @@ public:
     JMeasurementPanel& measurements() { return *m_measurementPanel; }
     JCursorPanel&      cursors()      { return *m_cursorPanel; }
     JReplayBar&        replayBar()    { return *m_replayBar; }
+    JGeneratorPanel&   generator()    { return *m_generatorPanel; }
 
     // Show the transport only when a capture is what is open. A Replay dock on a
     // live instrument would be a control with nothing to control.
@@ -74,6 +76,7 @@ private:
     std::unique_ptr<JMeasurementPanel> m_measurementPanel;
     std::unique_ptr<JCursorPanel>      m_cursorPanel;
     std::unique_ptr<JReplayBar>        m_replayBar;
+    std::unique_ptr<JGeneratorPanel>   m_generatorPanel;
 
     std::unique_ptr<JDockWidget> m_channelDock;
     std::unique_ptr<JDockWidget> m_timebaseDock;
@@ -81,6 +84,7 @@ private:
     std::unique_ptr<JDockWidget> m_measurementDock;
     std::unique_ptr<JDockWidget> m_cursorDock;
     std::unique_ptr<JDockWidget> m_replayDock;
+    std::unique_ptr<JDockWidget> m_generatorDock;
     JDockSpace*                  m_space{nullptr};
     bool                         m_replayVisible{false};
     std::vector<JScopeDockToggle> m_toggles;

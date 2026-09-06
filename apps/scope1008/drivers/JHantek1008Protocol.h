@@ -111,6 +111,25 @@ public:
     bool rollReadyLength(uint16_t& lengthOut);
     bool readRollBytes(size_t length, std::vector<uint8_t>& out);
 
+    // ---- the pattern generator ----------------------------------------------
+    //
+    // Each of these begins with 0xb7 0x00, which the reference sends before every
+    // generator write. Its meaning is not known -- it is reproduced because the
+    // sequence is only known to work as a whole, like the rest of this protocol.
+
+    // 0xbb: the output drivers. Sending a pattern does not start it.
+    bool setGeneratorOutput(bool on);
+
+    // 0xb9: one step every `pulseLength` ticks of the 48 MHz clock. Takes the
+    // pulse length rather than an RPM so that the caller decides how to round --
+    // the device counts whole ticks and most speeds are not exactly reachable.
+    bool setGeneratorPulseLength(uint32_t pulseLength);
+
+    // 0xbf then 0xb8: the pattern's length, then the pattern. One byte per step,
+    // bit i driving output i. Refused above kMaxPatternPerPacket, which is what
+    // fits a single 64-byte packet -- see that constant.
+    bool setGeneratorPattern(const std::vector<uint8_t>& pattern);
+
     // The initialisation sequence, replayed byte for byte from the reference.
     bool initialise(const std::vector<uint8_t>& activeChannels,
                     const std::vector<double>& vscales,

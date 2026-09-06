@@ -331,6 +331,87 @@ void testBurstCaptureOrder(JTestReport& r) {
 }
 
 
+// The generator's wire format. Every byte here came from the Python reference and
+// none of it is documented, so exact-byte checks are the only thing standing
+// between a refactor and eight outputs doing something unintended on a vehicle.
+void testGeneratorCommands(JTestReport& r) {
+    JUsbTranscriptTransport t;
+    JHantek1008Protocol p(t, 0x02, 0x81);
+    p.setTiming(instantTiming());
+
+    // Output on: the 0xb7 0x00 prologue, then 0xbb 0x08 0x01.
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorEnable);
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorSwitch);
+    r.check(p.setGeneratorOutput(true), "generator output on is accepted");
+    r.check(t.wroteExactly(0, { 0xb7, 0x00 }), "prologue is b7 00: " + t.writeHex(0));
+    r.check(t.wroteExactly(1, { 0xbb, 0x08, 0x01 }), "switch on is bb 08 01: " + t.writeHex(1));
+
+    t.reset();
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorEnable);
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorSwitch);
+    r.check(p.setGeneratorOutput(false), "generator output off is accepted");
+    r.check(t.wroteExactly(1, { 0xbb, 0x08, 0x00 }), "switch off is bb 08 00: " + t.writeHex(1));
+
+    // Speed. LITTLE-endian, where the trigger level on the same wire is big-endian.
+    // 1200 = 0x000004B0, so the bytes are B0 04 00 00 -- and that is the exact
+    // value the reference asserts for 300000 rpm over an 8-step pattern.
+    t.reset();
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorSpeed);
+    r.check(p.setGeneratorPulseLength(1200), "pulse length is accepted");
+    r.check(t.wroteExactly(0, { 0xb9, 0x01, 0xb0, 0x04, 0x00, 0x00 }),
+            "speed is b9 01 b0 04 00 00: " + t.writeHex(0));
+
+    r.check(!p.setGeneratorPulseLength(0), "a zero pulse length is refused");
+
+    // Pattern: prologue, length little-endian, then ALWAYS 62 payload bytes with
+    // the tail zeroed. A short payload would leave the previous pattern's tail in
+    // the device.
+    t.reset();
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorEnable);
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorLength);
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorWaveform);
+    r.check(p.setGeneratorPattern({ 0xf0, 0x0f, 0xf0, 0x0f }), "a four-step pattern is accepted");
+    r.check(t.wroteExactly(1, { 0xbf, 0x04, 0x00 }), "length is bf 04 00: " + t.writeHex(1));
+
+    std::vector<uint8_t> expected = { 0xb8, 0x01, 0xf0, 0x0f, 0xf0, 0x0f };
+    expected.resize(2 + JHantek1008Tables::kMaxPatternPerPacket, 0x00);
+    r.check(t.wroteExactly(2, expected),
+            "pattern is b8 01 then 62 bytes, zero padded: " + t.writeHex(2));
+
+    r.check(!p.setGeneratorPattern({}), "an empty pattern is refused");
+    r.check(!p.setGeneratorPattern(std::vector<uint8_t>(
+                JHantek1008Tables::kMaxPatternPerPacket + 1, 0x01)),
+            "a pattern longer than one packet is refused rather than truncated");
+}
+
+// The speed the device can actually run, which is not the speed asked for. The
+// OEM shows both for this reason, and the arithmetic is the whole reason it must.
+void testGeneratorSpeedQuantisation(JTestReport& r) {
+    using T = JHantek1008Tables;
+
+    // The reference's own assertion: 300000 rpm over 8 steps is a pulse of 1200.
+    r.check(T::pulseLengthFor(300000, 8) == 1200,
+            "300000 rpm over 8 steps is a pulse length of 1200");
+
+    // A speed that divides exactly comes back unchanged.
+    r.check(T::rpmForPulseLength(T::pulseLengthFor(600, 8), 8) == 600,
+            "600 rpm over 8 steps is exactly reachable");
+
+    // A pulse length is whole ticks, so the round trip is a floor, not identity.
+    // Asserting only the exact case would hide the very thing this models.
+    bool sawQuantised = false;
+    for (uint32_t rpm = 599; rpm <= 100000 && !sawQuantised; ++rpm)
+        if (T::rpmForPulseLength(T::pulseLengthFor(rpm, 8), 8) != rpm) sawQuantised = true;
+    r.check(sawQuantised, "some speeds are not exactly reachable, as the hardware implies");
+
+    // Longer pattern, same revolution: the pulse length must fall.
+    r.check(T::pulseLengthFor(600, 16) < T::pulseLengthFor(600, 8),
+            "more steps in a revolution means a shorter pulse for the same speed");
+
+    r.check(T::pulseLengthFor(0, 8) == 0,  "zero rpm yields no pulse length");
+    r.check(T::pulseLengthFor(600, 0) == 0, "a pattern with no steps yields no pulse length");
+}
+
 void testRollRateIds(JTestReport& r) {
     r.check(JHantek1008Tables::rollRateIdFor(440.0) == 0x18, "440 Sa/s is 0x18");
     r.check(JHantek1008Tables::rollRateIdFor(1.0)   == 0x20, "1 Sa/s is 0x20");
@@ -344,6 +425,8 @@ void testRollRateIds(JTestReport& r) {
 int main() {
     JTestReport r("JHantek1008Protocol");
     testCommandFraming(r);
+    testGeneratorCommands(r);
+    testGeneratorSpeedQuantisation(r);
     testActiveChannels(r);
     testVerticalScales(r);
     testEchoMismatchIsDetected(r);

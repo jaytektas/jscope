@@ -1,6 +1,7 @@
 #pragma once
 
 #include "JHantek1008Calibration.h"
+#include "JHantek1008PatternGenerator.h"
 #include "JHantek1008Protocol.h"
 #include "JHantek1008Tables.h"
 #include "scope/JScopeDriver.h"
@@ -41,6 +42,12 @@ public:
     const std::string&        driverId() const override { return m_driverId; }
     bool                      open(const JScopeDeviceInfo& device) override;
     void                      close() override;
+
+    // The eight digital outputs. Always present -- it is part of the instrument,
+    // not an accessory -- and usable before a device is open, where it simply
+    // remembers what it was told.
+    JScopeGenerator*       generator() override       { return &m_generator; }
+    const JScopeGenerator* generator() const override { return &m_generator; }
     bool                      isOpen() const override { return m_open; }
     const JScopeCapabilities& capabilities() const override { return m_caps; }
 
@@ -92,6 +99,8 @@ private:
     std::string                           m_calibrationPath;
 
     mutable std::mutex m_cfgMutex;
+    // Declared after the mutex it borrows, so it is destroyed before it.
+    JHantek1008PatternGenerator m_generator{m_cfgMutex};
     std::array<JScopeChannelConfig, JHantek1008Tables::kChannelCount> m_channels;
     JScopeTimebaseConfig m_timebase;
     JScopeTriggerConfig  m_trigger;

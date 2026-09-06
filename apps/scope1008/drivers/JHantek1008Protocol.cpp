@@ -168,6 +168,56 @@ bool JHantek1008Protocol::setTriggerLevel(uint16_t level) {
                 { static_cast<uint8_t>(level >> 8), static_cast<uint8_t>(level & 0xff) });
 }
 
+bool JHantek1008Protocol::setGeneratorOutput(bool on) {
+    if (!send(JHantek1008Tables::kGeneratorEnable, { 0x00 })) return false;
+    return send(JHantek1008Tables::kGeneratorSwitch, { 0x08, static_cast<uint8_t>(on ? 0x01 : 0x00) });
+}
+
+bool JHantek1008Protocol::setGeneratorPulseLength(uint32_t pulseLength) {
+    if (pulseLength == 0) {
+        m_lastError = "generator pulse length of zero would divide by zero on the device";
+        return false;
+    }
+    // Little-endian here. The trigger level and record length are big-endian on
+    // the same wire, which is not a mistake in either place -- this device simply
+    // is not consistent, and each command's order is the one observed for it.
+    return send(JHantek1008Tables::kGeneratorSpeed,
+                { 0x01,
+                  static_cast<uint8_t>(pulseLength & 0xff),
+                  static_cast<uint8_t>((pulseLength >> 8) & 0xff),
+                  static_cast<uint8_t>((pulseLength >> 16) & 0xff),
+                  static_cast<uint8_t>((pulseLength >> 24) & 0xff) });
+}
+
+bool JHantek1008Protocol::setGeneratorPattern(const std::vector<uint8_t>& pattern) {
+    if (pattern.empty()) {
+        m_lastError = "an empty pattern has no steps to play";
+        return false;
+    }
+    if (pattern.size() > JHantek1008Tables::kMaxPatternPerPacket) {
+        m_lastError = "pattern longer than one packet holds (" +
+                      std::to_string(JHantek1008Tables::kMaxPatternPerPacket) + " steps)";
+        return false;
+    }
+
+    if (!send(JHantek1008Tables::kGeneratorEnable, { 0x00 })) return false;
+
+    const uint16_t length = static_cast<uint16_t>(pattern.size());
+    if (!send(JHantek1008Tables::kGeneratorLength,
+              { static_cast<uint8_t>(length & 0xff), static_cast<uint8_t>(length >> 8) }))
+        return false;
+
+    // The payload is a FIXED 62 steps whatever the length above says: the device
+    // is told how much to play, then handed a full packet regardless. Sending a
+    // short one leaves the tail of the previous pattern in place.
+    std::vector<uint8_t> payload;
+    payload.reserve(1 + JHantek1008Tables::kMaxPatternPerPacket);
+    payload.push_back(0x01);
+    payload.insert(payload.end(), pattern.begin(), pattern.end());
+    payload.resize(1 + JHantek1008Tables::kMaxPatternPerPacket, 0x00);
+    return send(JHantek1008Tables::kGeneratorWaveform, payload);
+}
+
 bool JHantek1008Protocol::startAcquisition(uint8_t mode) {
     return send(JHantek1008Tables::kStartAcquisition, { mode });
 }

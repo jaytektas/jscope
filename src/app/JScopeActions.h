@@ -3,6 +3,7 @@
 #include "scope/JScopeAcquisitionMode.h"
 #include "scope/JScopeChannelConfig.h"
 #include "scope/JScopeTimebaseConfig.h"
+#include "scope/JPatternGenerator.h"
 #include "scope/JScopeTriggerConfig.h"
 
 #include <j/core/Signal.h>
@@ -69,6 +70,19 @@ public:
     // Where the trigger sits in the record, 0..1. On this instrument it is the
     // 0xac pre/post split; see docs/hantek1008-oem-behaviour.md.
     bool setTriggerPosition(double fraction);
+
+    // ---- the signal generator -------------------------------------------------
+    // All refuse, with a reason, on a device whose capabilities declare no
+    // generator — the panel is not built in that case, but an action must not
+    // depend on a panel's absence for its correctness.
+    bool setGeneratorOutput (bool on);
+    bool setGeneratorRpm    (uint32_t rpm);
+    bool setGeneratorPattern(const std::vector<uint8_t>& pattern);
+
+    // The generator the open device publishes, or nullptr. Panels read their
+    // current state through this rather than keeping a copy that could drift.
+    JPatternGenerator*       patternGenerator();
+    const JPatternGenerator* patternGenerator() const;
 
     // The instrument's settings changed and the read-back is available. Panels
     // and the trace view refresh from the driver when this fires.

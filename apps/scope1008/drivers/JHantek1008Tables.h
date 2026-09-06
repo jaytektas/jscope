@@ -206,6 +206,51 @@ struct JHantek1008Tables {
     static constexpr uint16_t kDefaultRecordSamples = 4000;
     static constexpr uint16_t kMaxRecordSamples     = 0x7FFF;   // byte count must fit 16 bits
 
+    // ---- The pattern generator -------------------------------------------------
+    //
+    // Eight digital outputs, driven from a pattern of bytes. One byte is one STEP
+    // of the pattern and its bit i drives output i, so the pattern is a picture of
+    // all eight lines over time rather than a waveform in any analogue sense. This
+    // is a crank/cam simulator: there is no amplitude and no sine.
+    //
+    // Speed is set as a pulse length, not a frequency. The device counts one step
+    // per `pulseLength` ticks of a 48 MHz clock, and a whole pattern is one
+    // revolution -- which is what makes RPM the natural unit and is how the OEM
+    // presents it ("Set Speed").
+    //
+    //     steps * pulseLength ticks = one revolution
+    //     rpm  = 60 * kGeneratorClockHz / (steps * pulseLength)
+    //
+    // 48 MHz is not a guess: the reference computes (8 * 360e6 / steps) / rpm, and
+    // 8 * 360e6 / 60 is exactly 48e6.
+    static constexpr double   kGeneratorClockHz     = 48.0e6;
+    static constexpr uint32_t kMaxPatternLength     = 1440;   // bytes the device will hold
+    static constexpr uint8_t  kPatternOutputs       = 8;      // bits per step, one per output
+
+    // 0xb8 carries [0x01] + the pattern, and a command must fit one 64-byte packet.
+    // Longer patterns need a chunking scheme nobody has observed on the wire, so
+    // this is the honest limit rather than kMaxPatternLength.
+    static constexpr uint32_t kMaxPatternPerPacket  = 62;
+
+    // Above 750k the reference notes the first parameter byte becomes 0x02 and the
+    // encoding changes in a way it never worked out. Refused rather than guessed.
+    static constexpr uint32_t kMinGeneratorRpm      = 1;
+    static constexpr uint32_t kMaxGeneratorRpm      = 750000;
+
+    // The device counts whole ticks, so most requested speeds are not achievable
+    // exactly -- which is why the OEM shows "Set Speed" and "Real Speed" as two
+    // different readouts. Both halves of that are here.
+    static constexpr uint32_t pulseLengthFor(uint32_t rpm, uint32_t steps) {
+        return (rpm == 0 || steps == 0)
+                   ? 0
+                   : static_cast<uint32_t>((60.0 * kGeneratorClockHz) / (double(steps) * rpm));
+    }
+    static constexpr uint32_t rpmForPulseLength(uint32_t pulseLength, uint32_t steps) {
+        return (pulseLength == 0 || steps == 0)
+                   ? 0
+                   : static_cast<uint32_t>((60.0 * kGeneratorClockHz) / (double(steps) * pulseLength) + 0.5);
+    }
+
     static constexpr double nsPerDivForId(uint8_t id) {
         const double mantissa = (id % 3 == 0) ? 1.0 : (id % 3 == 1 ? 2.0 : 5.0);
         double scale = 1.0;
@@ -276,9 +321,11 @@ struct JHantek1008Tables {
         kResetB0               = 0xb0,
         kStatusB5              = 0xb5,
         kStatusB6              = 0xb6,
-        kGeneratorEnable       = 0xb7,
-        kGeneratorSpeed        = 0xb9,
-        kGeneratorSwitch       = 0xbb,
+        kGeneratorEnable       = 0xb7,   // + 0x00, the prologue to every generator write
+        kGeneratorWaveform     = 0xb8,   // + 0x01 + 62 pattern bytes, zero padded
+        kGeneratorSpeed        = 0xb9,   // + 0x01 + pulse length, 32-bit little-endian
+        kGeneratorSwitch       = 0xbb,   // + 0x08 + 0x01 on / 0x00 off
+        kGeneratorLength       = 0xbf,   // + pattern length in bytes, 16-bit little-endian
         kAcquisitionArm        = 0xc0,
         kSetTrigger            = 0xc1,   // + source channel, slope
         kAcquisitionGo         = 0xc2,
