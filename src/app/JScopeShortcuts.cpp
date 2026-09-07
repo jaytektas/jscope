@@ -5,6 +5,7 @@
 
 #include "JScopeActions.h"
 #include "JScopeApp.h"
+#include "scope/JReferenceSignal.h"
 #include "scope/JScopeLog.h"
 #include "ui/JTraceView.h"
 
@@ -22,6 +23,18 @@ const std::vector<JScopeShortcut>& JScopeShortcuts::table() {
           [](JScopeApp& a) { a.actions().autoset(); } },
         { JKeyEvent::JKey::Z,     "Z",     "Reset the zoom to the whole record",
           [](JScopeApp& a) { a.traceView().resetViewWindow(); } },
+        // A key rather than only a menu, because the moment you want a reference
+        // is the moment both hands are on probes. Cycles rather than toggling:
+        // there are eight, and reaching for a menu to step between them defeats
+        // the point of having a key at all.
+        { JKeyEvent::JKey::R,     "R",     "Cycle the reference trace",
+          [](JScopeApp& a) {
+              constexpr size_t n = sizeof(kReferenceSignals) / sizeof(kReferenceSignals[0]);
+              const JReferenceSignal current = a.traceView().reference();
+              size_t i = 0;
+              while (i < n && kReferenceSignals[i] != current) ++i;
+              a.traceView().setReference(kReferenceSignals[(i + 1) % n]);
+          } },
     };
     return t;
 }

@@ -10,6 +10,7 @@
 #include "JScopeApp.h"
 
 #include "JScopeActions.h"
+#include "scope/JReferenceSignal.h"
 #include "scope/JScopeLog.h"
 #include "ui/JTraceView.h"
 
@@ -39,6 +40,15 @@ std::vector<std::unique_ptr<JMenu>>& menuStore() {
 struct JDockMenuEntry { JMenuItem* item; JScopeDockToggle toggle; };
 std::vector<JDockMenuEntry>& dockItems() {
     static std::vector<JDockMenuEntry> items;
+    return items;
+}
+
+// The Reference menu's entries, kept for the same reason the dock ones are: the
+// ticks have to be corrected as a set. Only one reference is drawn at a time, so
+// choosing one has to clear the other seven.
+struct JReferenceMenuEntry { JMenuItem* item; JReferenceSignal signal; };
+std::vector<JReferenceMenuEntry>& referenceItems() {
+    static std::vector<JReferenceMenuEntry> items;
     return items;
 }
 
@@ -357,6 +367,28 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
         app.traceView().resetViewWindow();
     });
 
+    // Reference traces. Built from kReferenceSignals rather than listed here, so
+    // adding a model to JReferenceSignal.h puts it on the menu and cannot leave a
+    // signal implemented but unreachable.
+    //
+    // Radio behaviour by hand: only one reference is drawn at a time, so choosing
+    // one clears the rest. JMenuItem has no group, and a set of independently
+    // checkable entries would let a user tick four and see one.
+    JMenu* reference = newMenu("Reference");
+    for (JReferenceSignal sig : kReferenceSignals) {
+        JMenuItem* item = reference->add(graph, jReferenceSignalName(sig));
+        item->setCheckable(true);
+        item->setChecked(sig == JReferenceSignal::None);
+        referenceItems().push_back({ item, sig });
+    }
+    for (const auto& entry : referenceItems()) {
+        entry.item->onTriggered.connect([&app, entry] {
+            app.traceView().setReference(entry.signal);
+            for (const auto& other : referenceItems())
+                other.item->setChecked(other.signal == entry.signal);
+        });
+    }
+
     // One checkable entry per dock. JMenuItem::activate() flips its own checked
     // state BEFORE emitting, so the handler reads the state the user just asked
     // for rather than having to invert it here.
@@ -374,7 +406,7 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
     // number somebody has to remember to update. It said "3 menus" while adding
     // five, having been written when there were three -- the same drift that left
     // the dock layout line describing a layout the app no longer builds.
-    const std::vector<JMenu*> bar = { file, acquire, device, instrument, generator, view, help };
+    const std::vector<JMenu*> bar = { file, acquire, device, instrument, generator, view, reference, help };
     for (JMenu* m : bar) window.menuBar().addMenu(m);
 
     // COUNTED, not stated. This line claimed three menus while five were being
@@ -383,7 +415,8 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
     // A number the code derives cannot drift from what the code does.
     JLOGC(JScopeLog::kUi, JLogLevel::Debug)
         << "menu bar built: " << bar.size() << " menus, "
-        << dockItems().size() << " dock toggles under View";
+        << dockItems().size() << " dock toggles under View, "
+        << referenceItems().size() << " reference signals";
 }
 
 

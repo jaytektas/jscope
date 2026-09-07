@@ -10,6 +10,7 @@
 #include "measure/JTraceDecimator.h"
 #include "scope/JScopeCapabilities.h"
 #include "scope/JScopeCoupling.h"
+#include "scope/JReferenceWaveform.h"
 #include "scope/JScopeFrame.h"
 #include "scope/JScopeLimits.h"
 
@@ -58,6 +59,20 @@ public:
                         double offsetVolts, bool inverted, JScopeCoupling coupling);
 
     void setGraticule(uint8_t divisionsX, uint8_t divisionsY);
+
+    // ---- reference trace ----
+    // The modelled shape a healthy device produces, drawn behind the live trace
+    // so the two can be compared. Generated, never recorded — see
+    // JReferenceSignal.h for why that distinction is the whole point.
+    //
+    // AUTOSCALED to the grid rather than drawn in true volts, and labelled with
+    // the range and window it actually represents. A primary-ignition reference
+    // peaks past 300 V; drawn true against a 2 V/div setting it would be an
+    // invisible vertical line off the top of the screen, and a user would read
+    // that as the feature being broken. What is being compared here is SHAPE,
+    // and the numbers that shape corresponds to are on the label.
+    void setReference(JReferenceSignal signal);
+    JReferenceSignal reference() const { return m_referenceSignal; }
 
     // What the on-screen legend reports besides the channels: the sweep state,
     // the timebase, and which channel the trigger is on and at what level.
@@ -155,6 +170,7 @@ private:
     JTraceViewport          _viewportFor(uint8_t channelId, const JRect& plot) const;
     JRect                   _plotRect() const;
     void _paintLegend(const JRect& plot, const JScopeTheme& theme);
+    void _paintReference(const JRect& plot, const JScopeTheme& theme);
     void _paintLegendText(JPrimitiveBuffer& buf, const JRect& plot,
                           const JScopeTheme& theme);
 
@@ -170,6 +186,10 @@ private:
 
     JScopeFrame m_frame;
     bool        m_hasFrame{false};
+
+    JReferenceSignal            m_referenceSignal{JReferenceSignal::None};
+    JReferenceWaveform::JTrace  m_reference;
+    JTraceDecimator::JPoints    m_referencePoints;   // reused; the render path allocates nothing
 
     std::array<JChannelView, JScopeLimits::kMaxChannels> m_channels;
 

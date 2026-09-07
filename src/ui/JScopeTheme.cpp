@@ -55,6 +55,13 @@ JScopeTheme makeDefault() {
     t.triggerMarker     = rgb (255, 160,  40);
     t.markerStrokeWidth = 1.0f;
 
+    // Deliberately desaturated and half-transparent: a reference sitting at full
+    // strength competes with the live trace it exists to be compared against.
+    t.referenceTrace      = rgba(150, 160, 185, 110);
+    t.referenceLabelText  = rgba(150, 160, 185, 200);
+    t.referenceWidth      = 1.0f;
+    t.referenceInsetFraction = 0.06f;
+
     t.cursorX             = rgba(255, 255, 255, 150);
     t.cursorY             = rgba(255, 255, 255, 110);
     t.cursorLabelText     = rgb (235, 238, 245);

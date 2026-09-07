@@ -158,6 +158,17 @@ void JTraceView::populateRenderPrimitives(JPrimitiveBuffer& buf) {
     m_canvas.flush(buf);
     m_canvas.clear();
 
+    // Behind everything the instrument measured. Drawn whether or not a frame has
+    // arrived, because a reference is useful before the first acquisition too —
+    // it says what you are looking for while you are still clipping the probe on.
+    if (m_referenceSignal != JReferenceSignal::None) {
+        _paintReference(plot, theme);
+        buf.pushClip(plot.x, plot.y, plot.width, plot.height);
+        m_canvas.flush(buf);
+        buf.popClip();
+        m_canvas.clear();
+    }
+
     if (m_hasFrame) {
         // Reserve once per width change, not per frame: the buffers then keep
         // their capacity and the render path stops allocating entirely.
@@ -275,6 +286,49 @@ void JTraceView::populateRenderPrimitives(JPrimitiveBuffer& buf) {
     _paintLegendText(buf, plot, theme);
 }
 
+void JTraceView::setReference(JReferenceSignal signal) {
+    if (signal == m_referenceSignal) return;
+    m_referenceSignal = signal;
+    m_reference       = JReferenceWaveform::generate(signal);
+
+    JLOGC(JScopeLog::kTrace, JLogLevel::Info)
+        << "reference trace: " << jReferenceSignalName(signal)
+        << (m_reference.samples.empty()
+                ? std::string(" (off)")
+                : " — " + std::to_string(m_reference.samples.size()) + " samples, "
+                  + std::to_string(m_reference.window) + "s, "
+                  + std::to_string(m_reference.minValue) + ".."
+                  + std::to_string(m_reference.maxValue) + m_reference.unit);
+    invalidate();
+}
+
+// GEOMETRY ONLY — the caption is pushed by _paintLegendText after the flush,
+// for the same reason every other label in this widget is.
+void JTraceView::_paintReference(const JRect& plot, const JScopeTheme& theme) {
+    const auto& v = m_reference.samples;
+    if (v.size() < 2 || plot.width <= 0.0f || plot.height <= 0.0f) return;
+
+    const double range = m_reference.maxValue - m_reference.minValue;
+    if (range <= 0.0) return;
+
+    // Inset so the extremes are visible rather than sitting exactly on the grid
+    // border, where a peak and the graticule line become the same pixel.
+    const float inset = plot.height * theme.referenceInsetFraction;
+    const float top    = plot.y + inset;
+    const float usable = plot.height - inset * 2.0f;
+
+    m_referencePoints.clear();
+    m_referencePoints.reserve(v.size());
+    for (size_t i = 0; i < v.size(); ++i) {
+        const float x = plot.x + plot.width * static_cast<float>(i) / static_cast<float>(v.size() - 1);
+        const float y = top + usable * static_cast<float>(1.0 - (v[i] - m_reference.minValue) / range);
+        m_referencePoints.push_back({x, y});
+    }
+
+    JTracePainter::paintInterpolated(m_canvas, m_referencePoints,
+                                     theme.referenceTrace, theme.referenceWidth, theme);
+}
+
 void JTraceView::setLegend(const std::string& sweepState, double secondsPerDiv,
                            uint8_t triggerChannel, double triggerLevelVolts) {
     m_sweepState           = sweepState;
@@ -350,6 +404,22 @@ void JTraceView::_paintLegendText(JPrimitiveBuffer& buf, const JRect& plot,
         JTracePainter::paintLegendChipText(buf, m_legendChips[i].rect,
                                            m_legendChips[i].name, m_legendChips[i].detail,
                                            theme.traceColor(m_legendChips[i].channel), theme);
+
+    // The reference's own scale, along the top of the grid. The trace itself is
+    // autoscaled, so without this the user has a shape and no idea what
+    // amplitude or timebase it corresponds to -- which is the difference between
+    // a diagnostic aid and a decoration.
+    if (m_referenceSignal != JReferenceSignal::None && !m_reference.samples.empty()) {
+        const std::string caption =
+            std::string("Ref: ") + jReferenceSignalName(m_referenceSignal)
+          + "  " + jScopeFormatUnit(m_reference.minValue, m_reference.unit)
+          + " to " + jScopeFormatUnit(m_reference.maxValue, m_reference.unit)
+          + " over " + jScopeFormatSeconds(m_reference.window);
+        JTextHelper::pushTextAligned(buf, plot.x, plot.y + t.viewPadding,
+                                     plot.width, t.markerBadgeHeight,
+                                     caption, t.referenceLabelText.data(),
+                                     JTextHelper::Align::Center, 0.0f);
+    }
 }
 
 void JTraceView::_recordBadge(const JRect& rect, char label) {

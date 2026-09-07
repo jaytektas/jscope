@@ -76,6 +76,15 @@ struct JScopeTheme {
     JColor triggerMarker;
     float  markerStrokeWidth;
 
+    // ---- reference trace ----
+    // The modelled "what a healthy one looks like" overlay. Dimmer than any
+    // channel colour and drawn thin, because it must never be mistaken for a
+    // measurement -- the eye should read it as the paper behind the trace.
+    JColor referenceTrace;
+    JColor referenceLabelText;
+    float  referenceWidth;
+    float  referenceInsetFraction;   // margin above and below, so peaks clear the grid border
+
     // ---- cursors ----
     JColor cursorX;
     JColor cursorY;

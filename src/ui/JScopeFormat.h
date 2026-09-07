@@ -17,13 +17,18 @@
 
 inline namespace jf {
 
-inline std::string jScopeFormatVolts(double v) {
-    char buf[32];
+// Volts is not the only unit on this display: a current clamp reads amps, and
+// the injector reference is a current. Same scaling either way, so it is written
+// once and the unit is passed in rather than the function being copied.
+inline std::string jScopeFormatUnit(double v, const char* unit) {
+    char buf[40];
     const double a = v < 0.0 ? -v : v;
-    if (a < 1.0) std::snprintf(buf, sizeof buf, "%g mV", v * 1000.0);
-    else         std::snprintf(buf, sizeof buf, "%g V",  v);
+    if (a < 1.0) std::snprintf(buf, sizeof buf, "%g m%s", v * 1000.0, unit);
+    else         std::snprintf(buf, sizeof buf, "%g %s",  v, unit);
     return buf;
 }
+
+inline std::string jScopeFormatVolts(double v) { return jScopeFormatUnit(v, "V"); }
 
 inline std::string jScopeFormatSeconds(double s) {
     char buf[32];
