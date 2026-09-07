@@ -194,9 +194,9 @@ bool JHantek1008Protocol::setGeneratorPattern(const std::vector<uint8_t>& patter
         m_lastError = "an empty pattern has no steps to play";
         return false;
     }
-    if (pattern.size() > JHantek1008Tables::kMaxPatternPerPacket) {
-        m_lastError = "pattern longer than one packet holds (" +
-                      std::to_string(JHantek1008Tables::kMaxPatternPerPacket) + " steps)";
+    if (pattern.size() > JHantek1008Tables::kMaxPatternLength) {
+        m_lastError = "pattern longer than the device holds (" +
+                      std::to_string(JHantek1008Tables::kMaxPatternLength) + " pulses)";
         return false;
     }
 
@@ -207,15 +207,25 @@ bool JHantek1008Protocol::setGeneratorPattern(const std::vector<uint8_t>& patter
               { static_cast<uint8_t>(length & 0xff), static_cast<uint8_t>(length >> 8) }))
         return false;
 
-    // The payload is a FIXED 62 steps whatever the length above says: the device
-    // is told how much to play, then handed a full packet regardless. Sending a
-    // short one leaves the tail of the previous pattern in place.
-    std::vector<uint8_t> payload;
-    payload.reserve(1 + JHantek1008Tables::kMaxPatternPerPacket);
-    payload.push_back(0x01);
-    payload.insert(payload.end(), pattern.begin(), pattern.end());
-    payload.resize(1 + JHantek1008Tables::kMaxPatternPerPacket, 0x00);
-    return send(JHantek1008Tables::kGeneratorWaveform, payload);
+    // A RUN OF CHUNKS, indexed from one. Each packet is the opcode, the chunk
+    // number, then a fixed 62 bytes: the device is told the real length above and
+    // handed full packets regardless, so a short tail is zero padded rather than
+    // sent short. The OEM writing 1440 pulses sends exactly this -- 24 packets,
+    // 0x01 to 0x18, the last carrying 14 real bytes.
+    const size_t chunkSize = JHantek1008Tables::kPatternBytesPerChunk;
+    const size_t chunks    = (pattern.size() + chunkSize - 1) / chunkSize;
+    for (size_t c = 0; c < chunks; ++c) {
+        const size_t from = c * chunkSize;
+        const size_t take = std::min(chunkSize, pattern.size() - from);
+
+        std::vector<uint8_t> payload;
+        payload.reserve(1 + chunkSize);
+        payload.push_back(static_cast<uint8_t>(c + 1));   // chunk index, 1-based
+        payload.insert(payload.end(), pattern.begin() + from, pattern.begin() + from + take);
+        payload.resize(1 + chunkSize, 0x00);
+        if (!send(JHantek1008Tables::kGeneratorWaveform, payload)) return false;
+    }
+    return true;
 }
 
 bool JHantek1008Protocol::startAcquisition(uint8_t mode) {

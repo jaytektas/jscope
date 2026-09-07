@@ -227,10 +227,15 @@ struct JHantek1008Tables {
     static constexpr uint32_t kMaxPatternLength     = 1440;   // bytes the device will hold
     static constexpr uint8_t  kPatternOutputs       = 8;      // bits per step, one per output
 
-    // 0xb8 carries [0x01] + the pattern, and a command must fit one 64-byte packet.
-    // Longer patterns need a chunking scheme nobody has observed on the wire, so
-    // this is the honest limit rather than kMaxPatternLength.
-    static constexpr uint32_t kMaxPatternPerPacket  = 62;
+    // 0xb8 carries [chunk index] + 62 pattern bytes, one 64-byte packet each, and
+    // the pattern is written as a RUN OF CHUNKS with the index counting from 1.
+    //
+    // The byte after the opcode was taken for a constant 0x01 and is in fact the
+    // chunk number: writing 0x01 and stopping wrote chunk one and left the rest of
+    // the device's buffer alone, which is where the old 62-pulse limit came from.
+    // Captured off the OEM writing 1440 pulses: 24 packets, indices 0x01 to 0x18,
+    // the last carrying 14 bytes -- 23 x 62 + 14 = 1440 exactly.
+    static constexpr uint32_t kPatternBytesPerChunk = 62;
 
     // THE DEVICE CANNOT STEP FASTER THAN THIS, and it is the limit that actually
     // bites. Measured from the OEM: with the pattern at its full 1440 steps the

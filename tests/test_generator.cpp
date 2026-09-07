@@ -102,7 +102,7 @@ void testSpeedCeilingMatchesTheInstrument(JTestReport& r) {
 void testCeilingFallsAsTheWheelGrows(JTestReport& r) {
     using T = JHantek1008Tables;
     uint32_t previous = T::maxRpmFor(1);
-    for (uint32_t pulses = 2; pulses <= T::kMaxPatternPerPacket; ++pulses) {
+    for (uint32_t pulses = 2; pulses <= T::kPatternBytesPerChunk; ++pulses) {
         const uint32_t now = T::maxRpmFor(pulses);
         if (now > previous) { r.check(false, "the ceiling never rises as pulses are added"); return; }
         previous = now;

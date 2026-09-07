@@ -125,9 +125,8 @@ public:
     // the device counts whole ticks and most speeds are not exactly reachable.
     bool setGeneratorPulseLength(uint32_t pulseLength);
 
-    // 0xbf then 0xb8: the pattern's length, then the pattern. One byte per step,
-    // bit i driving output i. Refused above kMaxPatternPerPacket, which is what
-    // fits a single 64-byte packet -- see that constant.
+    // 0xbf then a run of 0xb8: the pattern's length, then the pattern in 62-byte
+    // chunks indexed from one. One byte per pulse, bit i driving output i.
     bool setGeneratorPattern(const std::vector<uint8_t>& pattern);
 
     // The initialisation sequence, replayed byte for byte from the reference.

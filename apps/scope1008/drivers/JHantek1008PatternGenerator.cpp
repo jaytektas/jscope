@@ -31,12 +31,10 @@ JHantek1008PatternGenerator::JHantek1008PatternGenerator(std::mutex& deviceMutex
     : m_deviceMutex(deviceMutex) {
     m_caps.kind             = JScopeGeneratorKind::DigitalPattern;
     m_caps.patternOutputs   = JHantek1008Tables::kPatternOutputs;
-    // The device holds 1440 steps, but a pattern is written in ONE 64-byte packet
-    // and nobody has seen the chunking that would be needed beyond that. The
-    // smaller number is the one this driver can actually honour, so it is the one
-    // published -- a capability that overstates what works is worse than a modest
-    // one, because the UI builds itself from this.
-    m_caps.maxPatternLength = JHantek1008Tables::kMaxPatternPerPacket;
+    // The whole buffer. The chunking that reaches it was captured off the OEM and
+    // is implemented, so this is now the device's real limit rather than the size
+    // of a single packet.
+    m_caps.maxPatternLength = JHantek1008Tables::kMaxPatternLength;
     m_caps.minRpm           = JHantek1008Tables::kMinGeneratorRpm;
     // The absolute ceiling, for a pattern short enough that the step rate is not
     // what stops it. maxRpm() gives the one that applies to the pattern loaded.

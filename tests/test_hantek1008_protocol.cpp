@@ -363,9 +363,8 @@ void testGeneratorCommands(JTestReport& r) {
 
     r.check(!p.setGeneratorPulseLength(0), "a zero pulse length is refused");
 
-    // Pattern: prologue, length little-endian, then ALWAYS 62 payload bytes with
-    // the tail zeroed. A short payload would leave the previous pattern's tail in
-    // the device.
+    // Pattern: prologue, length little-endian, then a RUN OF CHUNKS indexed from
+    // one, each a full 62 bytes with the tail zero padded.
     t.reset();
     t.queueEchoedReply(JHantek1008Tables::kGeneratorEnable);
     t.queueEchoedReply(JHantek1008Tables::kGeneratorLength);
@@ -374,14 +373,36 @@ void testGeneratorCommands(JTestReport& r) {
     r.check(t.wroteExactly(1, { 0xbf, 0x04, 0x00 }), "length is bf 04 00: " + t.writeHex(1));
 
     std::vector<uint8_t> expected = { 0xb8, 0x01, 0xf0, 0x0f, 0xf0, 0x0f };
-    expected.resize(2 + JHantek1008Tables::kMaxPatternPerPacket, 0x00);
+    expected.resize(2 + JHantek1008Tables::kPatternBytesPerChunk, 0x00);
     r.check(t.wroteExactly(2, expected),
-            "pattern is b8 01 then 62 bytes, zero padded: " + t.writeHex(2));
+            "the single chunk is b8 01 then 62 bytes, zero padded: " + t.writeHex(2));
+
+    // MORE THAN ONE CHUNK. The byte after the opcode is the chunk index, and
+    // treating it as a constant 0x01 is what limited the driver to 62 pulses.
+    // Captured off the OEM: 1440 pulses go out as 24 packets, 0x01 to 0x18.
+    t.reset();
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorEnable);
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorLength);
+    for (int i = 0; i < 24; ++i) t.queueEchoedReply(JHantek1008Tables::kGeneratorWaveform);
+
+    std::vector<uint8_t> full(JHantek1008Tables::kMaxPatternLength);
+    for (size_t i = 0; i < full.size(); ++i) full[i] = static_cast<uint8_t>(i & 0xff);
+    r.check(p.setGeneratorPattern(full), "the device's full 1440-pulse pattern is accepted");
+    r.check(t.wroteExactly(1, { 0xbf, 0xa0, 0x05 }),
+            "length is bf a0 05, little-endian 1440: " + t.writeHex(1));
+    r.check(t.writes().size() == 26, "prologue, length, then 24 chunks");
+
+    // First and last chunk indices, and the tail padded rather than sent short.
+    r.check(t.writes()[2][1] == 0x01,  "the first chunk is index 0x01");
+    r.check(t.writes()[25][1] == 0x18, "the last chunk is index 0x18 (24)");
+    r.check(t.writes()[25].size() == 2 + JHantek1008Tables::kPatternBytesPerChunk,
+            "the last chunk is a full packet even though it carries 14 real bytes");
+    r.check(t.writes()[25][2 + 14] == 0x00, "and its tail is zero padded");
 
     r.check(!p.setGeneratorPattern({}), "an empty pattern is refused");
     r.check(!p.setGeneratorPattern(std::vector<uint8_t>(
-                JHantek1008Tables::kMaxPatternPerPacket + 1, 0x01)),
-            "a pattern longer than one packet is refused rather than truncated");
+                JHantek1008Tables::kMaxPatternLength + 1, 0x01)),
+            "a pattern longer than the device holds is refused rather than truncated");
 }
 
 // The speed the device can actually run, which is not the speed asked for. The
