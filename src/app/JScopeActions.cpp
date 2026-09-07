@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "scope/JScopeDriver.h"
+#include "scope/JSquFile.h"
 #include "scope/JScopeLog.h"
 #include "scope/JScopeSession.h"
 
@@ -174,6 +175,47 @@ bool JScopeActions::setGeneratorPattern(const std::vector<uint8_t>& pattern) {
         return false;
     }
     onConfigChanged.emit();
+    return true;
+}
+
+bool JScopeActions::downloadGeneratorPattern() {
+    JPatternGenerator* g = patternGenerator();
+    if (!g) { onRefused.emit("this device has no pattern generator"); return false; }
+    if (!g->download()) {
+        onRefused.emit("the generator refused the pattern: " + g->lastError());
+        return false;
+    }
+    onConfigChanged.emit();
+    return true;
+}
+
+bool JScopeActions::loadGeneratorPattern(const std::string& path) {
+    JPatternGenerator* g = patternGenerator();
+    if (!g) { onRefused.emit("this device has no pattern generator"); return false; }
+
+    JSquFile::JPattern file;
+    std::string error;
+    if (!JSquFile::read(path, file, error)) { onRefused.emit(error); return false; }
+    if (!g->setPattern(file.pulses)) {
+        onRefused.emit("the generator refused that pattern");
+        return false;
+    }
+    onConfigChanged.emit();
+    return true;
+}
+
+bool JScopeActions::saveGeneratorPattern(const std::string& path) const {
+    const JPatternGenerator* g = patternGenerator();
+    if (!g) { const_cast<JScopeActions*>(this)->onRefused.emit("no pattern to save"); return false; }
+
+    JSquFile::JPattern file;
+    file.pulses   = g->pattern();
+    file.channels = static_cast<uint16_t>(g->capabilities().patternOutputs);
+    std::string error;
+    if (!JSquFile::write(path, file, error)) {
+        const_cast<JScopeActions*>(this)->onRefused.emit(error);
+        return false;
+    }
     return true;
 }
 

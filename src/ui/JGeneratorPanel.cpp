@@ -93,7 +93,10 @@ void JGeneratorPanel::rebuild(const JScopeCapabilities& caps) {
                                                          t.panelFieldWidth, t.panelRowHeight));
         box->onStateChanged.connect([this](bool) {
             if (m_syncing) return;
-            _pushPattern();
+            // ONLY VISIBILITY. This used to rebuild the pattern, which threw away
+            // every edit the moment a line was switched on or off -- the one thing
+            // an editor must never do to the thing being edited.
+            onEnabledOutputsChanged.emit(enabledOutputs());
         });
         m_lines.push_back(box);
     }
@@ -104,6 +107,7 @@ void JGeneratorPanel::rebuild(const JScopeCapabilities& caps) {
     if (!m_lines.empty()) m_lines.front()->setChecked(true);
     m_pulses->setValue(static_cast<int>(std::min(kDefaultPulses, maxPulses)));
     m_syncing = false;
+    onEnabledOutputsChanged.emit(enabledOutputs());
 
     // AND SEND IT. Those setValue calls happen with m_syncing raised, which stops a
     // programmatic update being mistaken for the user turning a control -- and
@@ -114,12 +118,21 @@ void JGeneratorPanel::rebuild(const JScopeCapabilities& caps) {
     _pushPattern();
 }
 
+uint8_t JGeneratorPanel::enabledOutputs() const {
+    uint8_t mask = 0;
+    for (size_t i = 0; i < m_lines.size() && i < 8; ++i)
+        if (m_lines[i]->isChecked()) mask |= static_cast<uint8_t>(1u << i);
+    return mask;
+}
+
+// Rebuilds the pattern from scratch, which ONLY the pulse count may do: changing
+// how many pulses divide the cycle changes what every column means, so carrying
+// old edits across would move each event to an angle nobody chose. Switching an
+// output on or off changes nothing about the pattern and must not come here.
 void JGeneratorPanel::_pushPattern() {
     if (!m_pulses || !m_rpm) return;
 
-    uint8_t mask = 0;
-    for (size_t i = 0; i < m_lines.size(); ++i)
-        if (m_lines[i]->isChecked()) mask |= static_cast<uint8_t>(1u << i);
+    const uint8_t mask = enabledOutputs();
 
     // A fresh alternating pattern at the requested length. Regenerating rather
     // than resampling is deliberate: changing the pulse count changes what a

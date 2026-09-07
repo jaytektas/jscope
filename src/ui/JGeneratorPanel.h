@@ -7,6 +7,7 @@
 #include <j/core/JContainer.h>
 #include <j/core/JLabel.h>
 #include <j/core/JSpinBox.h>
+#include <j/core/Signal.h>
 
 #include <cstdint>
 #include <vector>
@@ -39,6 +40,13 @@ public:
     JGeneratorPanel(JSceneGraph& graph, JScopeActions& actions);
 
     void rebuild(const JScopeCapabilities& caps);
+
+    // Which outputs are switched on, as a bitmask. The editor shows exactly these
+    // lanes; the pattern keeps every line's pulses regardless, because the file
+    // format stores all eight and switching a line off is not the same as
+    // discarding what was drawn on it.
+    uint8_t enabledOutputs() const;
+    JSignal<uint8_t> onEnabledOutputsChanged;
     void syncFrom(const JScopeDriver& driver);
 
 private:

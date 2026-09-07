@@ -75,7 +75,8 @@ bool JHantek1008PatternGenerator::setPattern(const std::vector<uint8_t>& pattern
         m_actualRpm = achievableRpm(m_requestedRpm);
         m_dirty     = true;
     }
-    if (m_onChanged) m_onChanged();
+    // NO m_onChanged HERE. A pattern reaches the device on download() and not
+    // before: an edited cell is a change to a drawing, not a command.
     return true;
 }
 

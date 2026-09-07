@@ -60,6 +60,7 @@ private:
 
     JDockHost    m_host;
     JDockWidget* m_contentCapture{nullptr};
+    JDockWidget* m_hovered{nullptr};
 };
 
 } // inline namespace jf

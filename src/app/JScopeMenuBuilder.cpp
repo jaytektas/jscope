@@ -1,4 +1,6 @@
 #include "JScopeMenuBuilder.h"
+
+#include <j/core/Dialog.h>
 #include "JScopeApp.h"
 
 #include "JScopeActions.h"
@@ -249,6 +251,34 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
     instrumentMenu() = instrument;
     rebuildInstrumentMenu(graph, app);
 
+    // The generator's own file and device actions, in the OEM's order and with its
+    // names. Download is separate from editing on purpose -- see
+    // JScopeActions::downloadGeneratorPattern.
+    JMenu* generator = newMenu("Generator");
+    generator->add(graph, "Load Pattern...")->onTriggered.connect([&app] {
+        JDialogRequest req;
+        req.kind       = JDialogRequest::JKind::OpenFile;
+        req.title      = "Load generator pattern";
+        req.extensions = { "squ" };
+        req.onInput    = [&app](std::string path) {
+            if (!path.empty()) app.actions().loadGeneratorPattern(path);
+        };
+        JDialogManager::instance().push(std::move(req));
+    });
+    generator->add(graph, "Save Pattern...")->onTriggered.connect([&app] {
+        JDialogRequest req;
+        req.kind       = JDialogRequest::JKind::SaveFile;
+        req.title      = "Save generator pattern";
+        req.extensions = { "squ" };
+        req.onInput    = [&app](std::string path) {
+            if (!path.empty()) app.actions().saveGeneratorPattern(path);
+        };
+        JDialogManager::instance().push(std::move(req));
+    });
+    generator->add(graph, "Download to Device")->onTriggered.connect([&app] {
+        app.actions().downloadGeneratorPattern();
+    });
+
     JMenu* view = newMenu("View");
     view->add(graph, "Reset Zoom")->onTriggered.connect([&app] {
         JLOGC(JScopeLog::kUi, JLogLevel::Info) << "reset zoom";
@@ -272,7 +302,7 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
     // number somebody has to remember to update. It said "3 menus" while adding
     // five, having been written when there were three -- the same drift that left
     // the dock layout line describing a layout the app no longer builds.
-    const std::vector<JMenu*> bar = { file, acquire, device, instrument, view };
+    const std::vector<JMenu*> bar = { file, acquire, device, instrument, generator, view };
     for (JMenu* m : bar) window.menuBar().addMenu(m);
 
     // COUNTED, not stated. This line claimed three menus while five were being

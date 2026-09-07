@@ -49,6 +49,8 @@ public:
     uint32_t actualRpm() const override    { return m_actualRpm; }
     uint32_t achievableRpm(uint32_t rpm) const override;
     uint32_t maxRpm() const override;
+    bool download() override { return flush(); }
+    const std::string& lastError() const override { return m_lastError; }
 
     // THE PROTOCOL ONLY EXISTS WHILE THE DEVICE IS OPEN, and this outlives it, so
     // the driver hands it over on open and takes it away on close. Detached, the
@@ -70,7 +72,6 @@ public:
     // Told when something changed, so the driver can decide where flush() runs.
     void setChangeHandler(std::function<void()> handler) { m_onChanged = std::move(handler); }
 
-    const std::string& lastError() const { return m_lastError; }
 
 private:
     // Both callers already hold the device lock.

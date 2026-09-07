@@ -41,6 +41,25 @@ void JPulseGridEditor::setPattern(const std::vector<uint8_t>& pattern, uint8_t c
     m_channels = channels ? channels : 1;
 }
 
+void JPulseGridEditor::setEnabledChannels(uint8_t mask) { m_enabled = mask; }
+
+// A CHANNEL ALWAYS OWNS THE SAME LANE, whether or not it is shown. The grid is
+// divided into eight whatever is switched on, so a hidden line leaves its band
+// empty instead of the others growing to fill it.
+//
+// Packing them looked tidier and was wrong: switching an output on moved every
+// pulse on every other line to a new height and position, so the pattern jumped
+// under the cursor at the moment of least use for it to move. A grid you are
+// drawing on has to hold still.
+int JPulseGridEditor::_laneForChannel(uint8_t channel) const {
+    return (m_enabled & (1u << channel)) ? static_cast<int>(channel) : -1;
+}
+
+int JPulseGridEditor::_channelForLane(int lane) const {
+    if (lane < 0 || lane >= m_channels) return -1;
+    return (m_enabled & (1u << lane)) ? lane : -1;
+}
+
 JRect JPulseGridEditor::_gridRect() const {
     const JScopeTheme& t = JScopeTheme::current();
     const JRect b = bounds();
@@ -123,10 +142,12 @@ void JPulseGridEditor::handleMousePress(float mx, float my) {
 
     // Flip this channel's level at this pulse. One bit, in the device's own
     // format, so what is edited IS what gets sent.
-    m_pattern[static_cast<size_t>(col)] ^= static_cast<uint8_t>(1u << lane);
+    const int channel = _channelForLane(lane);
+    if (channel < 0) return;          // a hidden line is not editable
+    m_pattern[static_cast<size_t>(col)] ^= static_cast<uint8_t>(1u << channel);
     JLOGC(JScopeLog::kUi, JLogLevel::Debug)
-        << "pulse " << (col + 1) << " CH" << (lane + 1) << " -> "
-        << ((m_pattern[static_cast<size_t>(col)] & (1u << lane)) ? "high" : "low");
+        << "pulse " << (col + 1) << " CH" << (channel + 1) << " -> "
+        << ((m_pattern[static_cast<size_t>(col)] & (1u << channel)) ? "high" : "low");
     onPatternEdited.emit(m_pattern);
 }
 
@@ -163,7 +184,9 @@ void JPulseGridEditor::populateRenderPrimitives(JPrimitiveBuffer& buf) {
 
     // Lane separators and each channel's waveform.
     for (uint8_t ch = 0; ch < m_channels; ++ch) {
-        const float top    = g.y + laneH * float(ch);
+        const int lane = _laneForChannel(ch);
+        if (lane < 0) continue;                    // switched off: not drawn, not edited
+        const float top    = g.y + laneH * float(lane);
         const float mid    = top + laneH * 0.5f;
         const float high   = mid - waveH * 0.5f;
         const float low    = mid + waveH * 0.5f;
@@ -221,11 +244,16 @@ void JPulseGridEditor::populateRenderPrimitives(JPrimitiveBuffer& buf) {
     // draining it, so glyphs pushed before it would be emitted again underneath
     // the geometry.
     const float gw = gutterWidth(t);
-    for (uint8_t ch = 0; ch < m_channels; ++ch)
-        JTextHelper::pushTextAligned(buf, b.x, g.y + laneH * (float(ch) + 0.5f) - t.panelRowHeight * 0.5f,
+    for (uint8_t ch = 0; ch < m_channels; ++ch) {
+        const int lane = _laneForChannel(ch);
+        if (lane < 0) continue;
+        // The gutter still names the CHANNEL, not the lane, so hiding CH3 does not
+        // renumber everything below it.
+        JTextHelper::pushTextAligned(buf, b.x, g.y + laneH * (float(lane) + 0.5f) - t.panelRowHeight * 0.5f,
                                      gw, t.panelRowHeight, std::to_string(ch + 1),
                                      t.channelTrace[ch % JScopeLimits::kMaxChannels].data(),
                                      JTextHelper::Align::Center, 0.0f);
+    }
 
     // The cycle runs 0 to 720 degrees: two crank revolutions, one four-stroke
     // cycle. Labelling it in degrees is the point of the whole page.
@@ -251,7 +279,8 @@ void JPulseGridEditor::populateRenderPrimitives(JPrimitiveBuffer& buf) {
     // pulse, and where that pulse sits in the cycle.
     if (m_hoverColumn >= 0 && m_hoverLane >= 0) {
         const double degrees = kCycleDegrees * (double(m_hoverColumn) + 0.5) / double(columns);
-        const std::string readout = "CH" + std::to_string(m_hoverLane + 1) +
+        const int hoverChannel = _channelForLane(m_hoverLane);
+        const std::string readout = "CH" + std::to_string(hoverChannel + 1) +
                                     "  Pulse " + std::to_string(m_hoverColumn + 1) +
                                     " of " + std::to_string(columns) +
                                     "  " + std::to_string(static_cast<int>(degrees)) + "\xC2\xB0";

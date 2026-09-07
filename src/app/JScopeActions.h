@@ -79,6 +79,17 @@ public:
     bool setGeneratorRpm    (uint32_t rpm);
     bool setGeneratorPattern(const std::vector<uint8_t>& pattern);
 
+    // SEND THE PATTERN TO THE DEVICE, as a deliberate act. Editing a cell no
+    // longer writes to the instrument: at 1440 pulses a pattern is 26 commands,
+    // and issuing those on every click would put a burst of USB traffic behind
+    // each stroke of the pencil. The OEM has a Download for the same reason.
+    bool downloadGeneratorPattern();
+
+    // The OEM's own .squ files, so a pattern built in either application opens in
+    // the other.
+    bool loadGeneratorPattern(const std::string& path);
+    bool saveGeneratorPattern(const std::string& path) const;
+
     // The generator the open device publishes, or nullptr. Panels read their
     // current state through this rather than keeping a copy that could drift.
     JPatternGenerator*       patternGenerator();

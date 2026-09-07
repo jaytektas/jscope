@@ -37,6 +37,12 @@ public:
     // One byte per pulse column, bit i being channel i's level there -- the
     // device's own format, so nothing is translated on the way to the wire.
     void setPattern(const std::vector<uint8_t>& pattern, uint8_t channels);
+
+    // WHICH LANES ARE SHOWN AND EDITABLE. A line whose output is switched off is
+    // hidden rather than blanked: its pulses are still in the pattern, still in a
+    // saved file, and still there when it is switched back on. Drawing it flat
+    // would say its data had gone, and clearing it would make that true.
+    void setEnabledChannels(uint8_t mask);
     const std::vector<uint8_t>& pattern() const { return m_pattern; }
 
     // Emitted when a cell is flipped, with the whole edited pattern.
@@ -62,7 +68,12 @@ private:
     double _degreesForX(float mx) const;
     int   _cursorHandleAt(float mx, float my) const;   // -1 when not on a handle
 
+    // Lane index <-> channel number, for the lanes currently shown.
+    int  _laneForChannel(uint8_t channel) const;
+    int  _channelForLane(int lane) const;
+
     std::vector<uint8_t> m_pattern;
+    uint8_t              m_enabled{0xff};
     // Started where the OEM starts them, which is far enough apart to be
     // obviously two cursors rather than one.
     double               m_cursorDegrees[2]{ 144.0, 576.0 };

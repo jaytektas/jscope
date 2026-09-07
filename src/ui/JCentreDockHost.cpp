@@ -80,6 +80,14 @@ void JCentreDockHost::_route(float mx, float my, bool pressed, bool released) {
     // reaches the widget it started in.
     if (pressed) m_contentCapture = m_host.contentDockAt(mx, my);
     JDockWidget* d = m_contentCapture ? m_contentCapture : m_host.contentDockAt(mx, my);
+
+    // TELL THE ONE IT LEFT. A widget only hears about the pointer while it is over
+    // it, so a dock the pointer moves off keeps whatever hover state it had --
+    // visibly, in the editor's case, as a highlighted cell sitting under nothing.
+    // A move far outside any sane bounds is how it is told to drop that.
+    if (d != m_hovered && m_hovered && m_hovered->content())
+        m_hovered->content()->handleMouseMove(-1.0f, -1.0f);
+    m_hovered = d;
     if (d && d->content()) {
         JWidget* c = d->content();
         c->handleMouseMove(mx, my);

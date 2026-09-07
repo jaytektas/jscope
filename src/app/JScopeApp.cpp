@@ -111,6 +111,7 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
     // it — and the OEM's generator page is an editor, so that was the wrong tool.
     m_generatorTrace = std::make_unique<JPulseGridEditor>(m_app.sceneGraph());
     m_generatorTrace->onPatternEdited.connect([this](std::vector<uint8_t> edited) {
+        // Recorded, not sent: Generator > Download puts it on the instrument.
         m_actions.setGeneratorPattern(edited);
     });
     m_generatorTraceDock = std::make_unique<JDockWidget>("Pulse Editor", 0.f, 0.f, 0.f, 0.f);
@@ -123,6 +124,14 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
     // other, and a dock that can be closed with no way back is a dock that
     // disappears for good -- which is exactly what happened the first time one was
     // dragged out of the centre.
+    // Switching an output on or off shows or hides its lane. It does NOT touch the
+    // pattern -- the pulses stay, and a saved file carries all eight lines whatever
+    // is switched on.
+    m_docks->generator().onEnabledOutputsChanged.connect([this](uint8_t mask) {
+        m_generatorTrace->setEnabledChannels(mask);
+        m_window->requestRedraw();
+    });
+
     m_docks->registerToggle({ m_scopeDock.get(), &m_centre->host(), "Scope", false });
     m_docks->registerToggle({ m_generatorTraceDock.get(), &m_centre->host(),
                               "Pulse Editor", true });
@@ -742,6 +751,7 @@ void JScopeApp::_refreshGeneratorTrace() {
     // so what is edited is what gets sent and nothing is translated in between.
     m_generatorTrace->setPattern(g->pattern(),
                                  static_cast<uint8_t>(g->capabilities().patternOutputs));
+    m_generatorTrace->setEnabledChannels(m_docks->generator().enabledOutputs());
 }
 
 void JScopeApp::_syncViewFromDriver() {

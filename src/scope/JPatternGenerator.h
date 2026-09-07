@@ -51,6 +51,11 @@ public:
     // fast. It changes whenever the pattern does, which is why it is asked for
     // rather than published once in capabilities().
     virtual uint32_t maxRpm() const = 0;
+
+    // Send the pattern. Setting one only records it -- see JScopeActions for why
+    // an edit does not write to the instrument.
+    virtual bool download() = 0;
+    virtual const std::string& lastError() const = 0;
 };
 
 } // inline namespace jf
