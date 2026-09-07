@@ -251,6 +251,13 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
     instrumentMenu() = instrument;
     rebuildInstrumentMenu(graph, app);
 
+    // NO TEAR-OFF MENUS. The framework lets a menu be dragged out into a window of
+    // its own, and this application has no use for one: every menu here is a short
+    // list acted on and dismissed, and a floating copy of it is a window to lose
+    // track of rather than a tool. One global switch rather than a flag per menu,
+    // so a menu added later cannot quietly arrive tearable.
+    JMenuManager::instance().setTearOffEnabled(false);
+
     // The generator's own file and device actions, in the OEM's order and with its
     // names. Download is separate from editing on purpose -- see
     // JScopeActions::downloadGeneratorPattern.
