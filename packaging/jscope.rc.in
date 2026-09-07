@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jason Roughley <pis.controller@gmail.com>
+//
+// Windows resources for jscope.exe. Configured by CMake -- the version and the
+// icon path are substituted in, so neither is written down twice.
+//
+// Windows does not look an icon up by name the way a desktop entry does; it
+// reads it out of the executable, and an executable with no icon resource gets
+// the generic default. So the icon has to be compiled in, and the .ico it comes
+// from is rendered from the same packaging/jscope.svg the Linux launcher uses
+// -- one drawing, both platforms, by packaging/make-icon.sh.
+//
+// Resource id 1 ON PURPOSE: Explorer shows the icon with the LOWEST id as the
+// application icon, so the one meant to represent the program has to sort
+// first. There is only one here, but the rule is why it is numbered rather
+// than named.
+
+1 ICON "@JSCOPE_ICON@"
+
+// VERSIONINFO is what the file's Properties -> Details tab reads. Without it a
+// downloaded binary shows blank publisher and version fields, which is exactly
+// the shape of a file people are told not to run. Saying plainly what this is
+// and who wrote it costs nothing and is the honest thing to put on something
+// asking to be trusted with a driver swap.
+
+1 VERSIONINFO
+FILEVERSION     @JSCOPE_VER_COMMA@
+PRODUCTVERSION  @JSCOPE_VER_COMMA@
+FILEOS          0x4L        // VOS__WINDOWS32
+FILETYPE        0x1L        // VFT_APP
+{
+    BLOCK "StringFileInfo"
+    {
+        BLOCK "040904B0"    // US English, Unicode
+        {
+            VALUE "CompanyName",      "Jason Roughley"
+            VALUE "FileDescription",  "Oscilloscope front end for the Hantek 1008C"
+            VALUE "FileVersion",      "@PROJECT_VERSION@"
+            VALUE "InternalName",     "jscope"
+            VALUE "OriginalFilename", "jscope.exe"
+            VALUE "ProductName",      "jscope"
+            VALUE "ProductVersion",   "@PROJECT_VERSION@"
+            VALUE "LegalCopyright",   "Copyright (C) 2026 Jason Roughley. GPLv3."
+        }
+    }
+    BLOCK "VarFileInfo"
+    {
+        VALUE "Translation", 0x409, 1200
+    }
+}

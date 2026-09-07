@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 project(jscope VERSION 0.1.0 LANGUAGES CXX)
 
+# windres, for the Windows icon and version resource. Enabled only where it
+# exists -- a Linux build has no use for it and asking for it would fail.
+if(WIN32)
+    enable_language(RC)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -105,6 +111,20 @@ function(scope_app name entry driver_src app_dir)
     add_executable(${name} ${entry} ${driver_src} ${SCOPE_SHELL_SRC})
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${app_dir})
     target_compile_definitions(${name} PRIVATE JSCOPE_VERSION="${PROJECT_VERSION}")
+    # Windows reads an application's icon out of the executable itself, so it
+    # has to be compiled in as a resource -- there is no equivalent of the
+    # desktop entry's Icon= lookup. The version is handed to the resource
+    # compiler from PROJECT_VERSION for the same reason it is handed to the
+    # code: one source of truth, so the About box and the file's Properties
+    # tab cannot disagree.
+    if(WIN32)
+        string(REPLACE "." "," JSCOPE_VER_COMMA "${PROJECT_VERSION}")
+        set(JSCOPE_VER_COMMA "${JSCOPE_VER_COMMA},0")
+        set(JSCOPE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/packaging/jscope.ico")
+        set(rc "${CMAKE_CURRENT_BINARY_DIR}/${name}_resources.rc")
+        configure_file(${CMAKE_CURRENT_SOURCE_DIR}/packaging/jscope.rc.in ${rc} @ONLY)
+        target_sources(${name} PRIVATE ${rc})
+    endif()
     target_link_libraries(${name} PRIVATE scope_ui scope_core JFramework::platform
                                           PkgConfig::LIBUSB Threads::Threads)
     # WM_CLASS is an X11 property, so the code that sets it and the library it

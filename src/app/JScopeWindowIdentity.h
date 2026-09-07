@@ -7,7 +7,10 @@ namespace jf { class JAppWindow; }
 
 inline namespace jf {
 
-// Give the window a WM_CLASS of its own.
+// Give the window an identity of its own: a WM_CLASS on X11, an icon on
+// Windows. Both are things the desktop reads to decide what this window is, and
+// in both cases JFramework leaves the field at a default shared by every
+// application built on it.
 //
 // JFramework sets WM_CLASS to "genesis-ui"/"GenesisUi" for every application it
 // builds, and offers no way to change it. That is what a desktop uses to decide
@@ -21,8 +24,13 @@ inline namespace jf {
 // desktop entry can name JScope specifically without capturing another app's
 // windows.
 //
-// X11 only, and silently does nothing anywhere else: this is a property of the
-// X protocol, and under a native Wayland surface there is nothing to set.
+// On Windows the framework registers its window class with a null hIcon, so a
+// running window shows the generic default even once the executable carries an
+// icon resource. The icon is set on the CLASS, which reaches the floating dock
+// windows as well, since they share it.
+//
+// Silently does nothing anywhere else -- under a native Wayland surface there
+// is no WM_CLASS to set and no icon to attach.
 void applyWindowIdentity(JAppWindow& window);
 
 } // inline namespace jf
