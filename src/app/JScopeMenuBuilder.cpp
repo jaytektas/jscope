@@ -278,9 +278,15 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
 }
 
 
-void JScopeMenuBuilder::syncViewMenu() {
-    for (const JDockMenuEntry& e : dockItems())
-        e.item->setChecked(JScopeDockLayout::isDockVisible(e.toggle));
+void JScopeMenuBuilder::syncViewMenu(const JScopeDockLayout& docks) {
+    for (const JDockMenuEntry& e : dockItems()) {
+        // Greyed rather than hidden when the open instrument has no such dock: an
+        // entry that vanishes makes the menu's shape change under the cursor,
+        // whereas a disabled one says the feature exists and this device lacks it.
+        const bool available = docks.isDockAvailable(e.toggle);
+        e.item->setEnabled(available);
+        e.item->setChecked(available && JScopeDockLayout::isDockVisible(e.toggle));
+    }
 }
 
 void JScopeMenuBuilder::refreshInstrumentMenu(JSceneGraph& graph, JScopeApp& app) {

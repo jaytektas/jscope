@@ -64,6 +64,12 @@ public:
     // device change would silently overrule is worse than offering none.
     const std::vector<JScopeDockToggle>& dockToggles() const { return m_toggles; }
 
+    // Whether the OPEN device can fill this dock at all. A panel built from
+    // capabilities the instrument does not have is an empty box with a name on
+    // it, which reads as a broken feature rather than an absent one -- so the
+    // dock is withdrawn and its menu entry greyed instead of being offered.
+    bool isDockAvailable(const JScopeDockToggle& t) const;
+
     // Hiding removes the dock from WHEREVER it currently is, which need not be its
     // home area — a floated dock is still placed, just placed somewhere else.
     void setDockVisible(const JScopeDockToggle& t, bool on);
@@ -88,6 +94,7 @@ private:
     JDockSpace*                  m_space{nullptr};
     bool                         m_replayVisible{false};
     std::vector<JScopeDockToggle> m_toggles;
+    bool                          m_generatorAvailable{false};
 };
 
 } // inline namespace jf

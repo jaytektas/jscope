@@ -1,5 +1,7 @@
 #include "JScopeDockLayout.h"
 
+#include <algorithm>
+
 #include "scope/JScopeDriver.h"
 #include "scope/JScopeLog.h"
 #include "ui/JScopeTheme.h"
@@ -63,9 +65,10 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
     space.right().addDock(m_channelDock.get());
     space.left().addDock(m_timebaseDock.get());
     space.left().addDock(m_triggerDock.get());     // second dock in an area tabs
-    // The generator tabs alongside them: it is set once for a test and then left,
-    // so it wants to be reachable rather than permanently on screen.
-    space.left().addDock(m_generatorDock.get());
+    // The Generator is NOT added here. It belongs to the left area and tabs
+    // alongside these two, but only once an instrument that has one is open --
+    // rebuild() puts it there. Adding it now would show an empty panel to anyone
+    // who has not connected anything, which is every user at startup.
 
     // Measure and Cursors go together at the bottom: they are read side by side
     // while probing, and they are the two panels that want horizontal room for
@@ -91,8 +94,9 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
     };
 
     JLOGC(JScopeLog::kUi, JLogLevel::Info)
-        << "dock layout built: Channels right, Timebase+Trigger+Generator left, "
-           "Measure+Cursors bottom (Replay hidden until a capture is open)";
+        << "dock layout built: Channels right, Timebase+Trigger left, "
+           "Measure+Cursors bottom (Replay and Generator appear when a capture "
+           "or an instrument with a generator is open)";
 }
 
 void JScopeDockLayout::setDockVisible(const JScopeDockToggle& t, bool on) {
@@ -117,9 +121,31 @@ void JScopeDockLayout::setReplayVisible(bool on) {
         << "replay transport " << (on ? "shown" : "hidden");
 }
 
+bool JScopeDockLayout::isDockAvailable(const JScopeDockToggle& t) const {
+    // Only the Generator is conditional today. The rest are built from channel and
+    // timebase capabilities every scope has.
+    if (t.dock == m_generatorDock.get()) return m_generatorAvailable;
+    return true;
+}
+
 void JScopeDockLayout::rebuild(const JScopeCapabilities& caps) {
     m_channelPanel->rebuild(caps);
     m_generatorPanel->rebuild(caps);
+
+    // Withdraw the Generator when this instrument has none. It is a tab in the
+    // left area, so leaving it in place would put an empty panel one click away
+    // from Timebase and invite the reasonable conclusion that it is broken.
+    const bool hadGenerator = m_generatorAvailable;
+    m_generatorAvailable = (caps.generator.kind != JScopeGeneratorKind::None);
+    if (m_generatorAvailable != hadGenerator) {
+        const auto it = std::find_if(m_toggles.begin(), m_toggles.end(),
+            [this](const JScopeDockToggle& t) { return t.dock == m_generatorDock.get(); });
+        if (it != m_toggles.end()) setDockVisible(*it, m_generatorAvailable);
+        JLOGC(JScopeLog::kUi, JLogLevel::Info)
+            << "generator dock " << (m_generatorAvailable ? "shown" : "withdrawn")
+            << ": this instrument "
+            << (m_generatorAvailable ? "has a generator" : "has none");
+    }
     m_timebasePanel->rebuild(caps);
     m_triggerPanel->rebuild(caps);
     m_measurementPanel->rebuild(caps);

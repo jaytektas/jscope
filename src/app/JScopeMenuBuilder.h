@@ -7,6 +7,7 @@
 inline namespace jf {
 
 class JScopeApp;
+class JScopeDockLayout;
 
 // Builds the menu bar. A class rather than a JScopeApp method so that the app
 // stays a wiring object and the menu tree lives somewhere it can be read in one
@@ -30,7 +31,7 @@ public:
     // Docks appear and disappear by routes the menu never hears about -- a dock's
     // own close button, a tear-out dropped nowhere -- so the ticks are re-derived
     // rather than remembered.
-    static void syncViewMenu();
+    static void syncViewMenu(const JScopeDockLayout& docks);
 };
 
 } // inline namespace jf
