@@ -29,6 +29,9 @@ struct JScopeDockToggle {
     JDockWidget* dock{nullptr};
     JDockHost*   home{nullptr};
     const char*  title{nullptr};
+    // Offered only by an instrument that has a generator. The dock is real either
+    // way; what changes is whether there is anything for it to show.
+    bool         needsGenerator{false};
 };
 
 // Places the control panels in the window's dock space, each in its own dock so
@@ -73,6 +76,12 @@ public:
     // Hiding removes the dock from WHEREVER it currently is, which need not be its
     // home area — a floated dock is still placed, just placed somewhere else.
     void setDockVisible(const JScopeDockToggle& t, bool on);
+
+    // Add a dock this class does not own to the View menu's list. The centre's
+    // docks live in the central host rather than in the dock space, but a dock the
+    // user can close is a dock the user needs a way back to, wherever it lives --
+    // and closing one with no route back is how the centre ended up empty.
+    void registerToggle(const JScopeDockToggle& t);
     static bool isDockVisible(const JScopeDockToggle& t) { return t.dock && t.dock->isPlaced(); }
 
 private:

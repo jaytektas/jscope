@@ -90,7 +90,7 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
         { m_triggerDock.get(),     &space.left(),   "Trigger"  },
         { m_cursorDock.get(),      &space.bottom(), "Cursors"  },
         { m_measurementDock.get(), &space.bottom(), "Measure"  },
-        { m_generatorDock.get(),   &space.left(),   "Generator" },
+        { m_generatorDock.get(),   &space.left(),   "Generator", true },
     };
 
     JLOGC(JScopeLog::kUi, JLogLevel::Info)
@@ -122,10 +122,12 @@ void JScopeDockLayout::setReplayVisible(bool on) {
 }
 
 bool JScopeDockLayout::isDockAvailable(const JScopeDockToggle& t) const {
-    // Only the Generator is conditional today. The rest are built from channel and
-    // timebase capabilities every scope has.
-    if (t.dock == m_generatorDock.get()) return m_generatorAvailable;
+    if (t.needsGenerator || t.dock == m_generatorDock.get()) return m_generatorAvailable;
     return true;
+}
+
+void JScopeDockLayout::registerToggle(const JScopeDockToggle& t) {
+    if (t.dock && t.home) m_toggles.push_back(t);
 }
 
 void JScopeDockLayout::rebuild(const JScopeCapabilities& caps) {

@@ -94,6 +94,14 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
     m_centre = std::make_unique<JCentreDockHost>(m_app.sceneGraph());
     m_window->setCentralWidget(m_centre.get());
 
+    // A tab torn out of the centre becomes its own window. Only the runner can
+    // make one -- it owns the float list, the GPU surfaces and the drag state --
+    // so the host reports the gesture and it is handed straight back.
+    m_centre->onWantsFloat = [this](JDockHost* host, JDockWidget* dock) {
+        m_window->floatDock(host, dock);
+    };
+    m_centre->onDockClosed = [this](JDockWidget*) { m_window->requestRedraw(); };
+
     m_scopeDock = std::make_unique<JDockWidget>("Scope", 0.f, 0.f, 0.f, 0.f);
     m_scopeDock->setContent(m_traceView.get());
     m_centre->addDock(m_scopeDock.get());
@@ -107,6 +115,14 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
 
     m_docks = std::make_unique<JScopeDockLayout>(*m_window, m_app.sceneGraph(), m_actions,
                                                  m_traceView->cursors());
+
+    // The centre's docks go in the View menu too. They have close buttons like any
+    // other, and a dock that can be closed with no way back is a dock that
+    // disappears for good -- which is exactly what happened the first time one was
+    // dragged out of the centre.
+    m_docks->registerToggle({ m_scopeDock.get(), &m_centre->host(), "Scope", false });
+    m_docks->registerToggle({ m_generatorTraceDock.get(), &m_centre->host(),
+                              "Generator Output", true });
 
     JScopeMenuBuilder::build(*m_window, m_app.sceneGraph(), *this);
     JScopeToolBarBuilder::build(*m_window, *this);
@@ -167,6 +183,11 @@ void JScopeApp::_wireFrameTiming() {
             m_deviceSelectionPending = false;
             _selectDevice();
         }
+
+        // The centre host's hit rect in the dock registry, refreshed each frame so a
+        // float dragged over the centre finds it after the window has been moved
+        // or resized -- neither of which this widget is told about directly.
+        m_centre->refreshRegistration(m_window->windowX(), m_window->windowY());
 
         // Cheap enough to do every frame (five comparisons) and it is the only way
         // the ticks stay honest: a dock can be closed by its own button or dropped
