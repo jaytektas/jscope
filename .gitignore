@@ -3,3 +3,4 @@ build-*/
 genesis.log
 genesis.log.*
 *.ppm
+dist/
