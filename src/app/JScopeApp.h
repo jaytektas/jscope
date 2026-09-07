@@ -5,8 +5,8 @@
 #include "JScopeSettings.h"
 #include "capture/JCaptureWriter.h"
 #include "scope/JScopeSession.h"
-#include "scope/JGeneratorSignal.h"
 #include "ui/JCentreDockHost.h"
+#include "ui/JPulseGridEditor.h"
 #include "ui/JTraceView.h"
 
 #include <j/app/JAppWindow.h>
@@ -133,9 +133,8 @@ private:
     // by side, tabbed or split, rather than one of them being exiled to a panel.
     std::unique_ptr<JCentreDockHost>  m_centre;
     std::unique_ptr<JDockWidget>      m_scopeDock;
-    std::unique_ptr<JTraceView>       m_generatorTrace;
+    std::unique_ptr<JPulseGridEditor> m_generatorTrace;
     std::unique_ptr<JDockWidget>      m_generatorTraceDock;
-    JGeneratorSignal                  m_generatorSignal;
     void _refreshGeneratorTrace();
     JScopeSession                     m_session;
     JScopeActions                     m_actions{m_session};

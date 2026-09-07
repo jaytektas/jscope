@@ -106,11 +106,14 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
     m_scopeDock->setContent(m_traceView.get());
     m_centre->addDock(m_scopeDock.get());
 
-    // A second trace, showing what the generator is PUTTING OUT rather than
-    // anything measured — see JGeneratorSignal for why that is worth drawing and
-    // why it is drawn with the acquisition renderer rather than a second one.
-    m_generatorTrace = std::make_unique<JTraceView>(m_app.sceneGraph());
-    m_generatorTraceDock = std::make_unique<JDockWidget>("Generator Output", 0.f, 0.f, 0.f, 0.f);
+    // The generator's pattern, as an EDITOR rather than a picture. It was a second
+    // JTraceView, which rendered the signal faithfully and gave no way to change
+    // it — and the OEM's generator page is an editor, so that was the wrong tool.
+    m_generatorTrace = std::make_unique<JPulseGridEditor>(m_app.sceneGraph());
+    m_generatorTrace->onPatternEdited.connect([this](std::vector<uint8_t> edited) {
+        m_actions.setGeneratorPattern(edited);
+    });
+    m_generatorTraceDock = std::make_unique<JDockWidget>("Pulse Editor", 0.f, 0.f, 0.f, 0.f);
     m_generatorTraceDock->setContent(m_generatorTrace.get());
 
     m_docks = std::make_unique<JScopeDockLayout>(*m_window, m_app.sceneGraph(), m_actions,
@@ -122,7 +125,7 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
     // dragged out of the centre.
     m_docks->registerToggle({ m_scopeDock.get(), &m_centre->host(), "Scope", false });
     m_docks->registerToggle({ m_generatorTraceDock.get(), &m_centre->host(),
-                              "Generator Output", true });
+                              "Pulse Editor", true });
 
     JScopeMenuBuilder::build(*m_window, m_app.sceneGraph(), *this);
     JScopeToolBarBuilder::build(*m_window, *this);
@@ -733,42 +736,12 @@ namespace { constexpr double kHorizontalDivisionsForGenerator = 10.0; }
 
 void JScopeApp::_refreshGeneratorTrace() {
     if (!m_generatorTrace) return;
-
     const JPatternGenerator* g = m_actions.patternGenerator();
-    if (!g || g->pattern().empty() || g->actualRpm() == 0) {
-        m_generatorTrace->clearFrame();
-        return;
-    }
-
-    // One pass of the pattern is one revolution, so the frame spans exactly the
-    // time that revolution takes at the speed the device can actually run — the
-    // achievable speed, not the requested one, because this draws what comes out.
-    const double revolutionSeconds = 60.0 / static_cast<double>(g->actualRpm());
-    m_generatorSignal.build(g->pattern(), static_cast<uint8_t>(g->capabilities().patternOutputs),
-                            revolutionSeconds);
-    if (!m_generatorSignal.valid()) { m_generatorTrace->clearFrame(); return; }
-
-    const JScopeFrame& f = m_generatorSignal.frame();
-
-    // Eight lanes, stacked, one per output — the OEM's generator window laid out
-    // the same way, and the only arrangement in which eight digital lines can be
-    // read at once. Overlaid on a common baseline they are one indistinguishable
-    // scribble.
-    // From the instrument's capabilities, not a driver's own table: src/app must
-    // not reach into one scope's driver, and the graticule is something every
-    // device describes for itself.
-    const JScopeCapabilities& caps = m_session.driver()->capabilities();
-    const uint8_t divisions = caps.verticalDivisions;
-    m_generatorTrace->setGraticule(caps.horizontalDivisions, divisions);
-    for (uint8_t c = 0; c < f.header.channelCount; ++c) {
-        m_generatorTrace->setChannelView(c, true, f.header.voltsPerDiv[c], 0.0, false,
-                                         JScopeCoupling::DC);
-        m_generatorTrace->setChannelPosition(c, JGeneratorSignal::lanePosition(c, divisions));
-    }
-    m_generatorTrace->setFrame(f);
-    m_generatorTrace->setTimeWindow(revolutionSeconds / kHorizontalDivisionsForGenerator);
-    m_generatorTrace->setLegend("Commanded", revolutionSeconds / kHorizontalDivisionsForGenerator,
-                                0, 0.0);
+    if (!g) { m_generatorTrace->setPattern({}, 0); return; }
+    // Straight from the generator, in the device's own one-byte-per-pulse format,
+    // so what is edited is what gets sent and nothing is translated in between.
+    m_generatorTrace->setPattern(g->pattern(),
+                                 static_cast<uint8_t>(g->capabilities().patternOutputs));
 }
 
 void JScopeApp::_syncViewFromDriver() {

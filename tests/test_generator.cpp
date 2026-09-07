@@ -1,5 +1,4 @@
 #include "scope/JCrankWheel.h"
-#include "scope/JGeneratorSignal.h"
 #include "drivers/JHantek1008PatternGenerator.h"
 #include "drivers/JHantek1008Protocol.h"
 #include "drivers/JHantek1008Tables.h"
@@ -155,40 +154,6 @@ void testFlushDoesNotAbandonASequence(JTestReport& r) {
             "but the sequence still runs to the end rather than leaving the device mid-command");
 }
 
-// Eight digital lines are only readable if they do not sit on top of each other.
-// At 5 V/div a 0-5 V swing is exactly one division, so eight of them fill an
-// eight-division graticule with one lane each and no overlap -- which is how the
-// OEM's generator window shows them.
-void testLanesStackWithoutOverlap(JTestReport& r) {
-    constexpr uint8_t kDivisions = 8;
-    constexpr double  kSwing     = JGeneratorSignal::kHighVolts - JGeneratorSignal::kLowVolts;
-
-    r.check(JGeneratorSignal::kVoltsPerDiv == kSwing,
-            "one output's full swing is exactly one division");
-
-    // CH1 on top, CH8 at the bottom, in numbering order.
-    const double first = JGeneratorSignal::lanePosition(0, kDivisions);
-    const double last  = JGeneratorSignal::lanePosition(7, kDivisions);
-    r.check(first > last, "CH1 sits above CH8");
-
-    // Adjacent lanes are exactly one division apart: any less and they overlap,
-    // any more and eight of them do not fit.
-    for (uint8_t i = 0; i + 1 < kDivisions; ++i) {
-        const double gap = JGeneratorSignal::lanePosition(i, kDivisions) -
-                           JGeneratorSignal::lanePosition(i + 1, kDivisions);
-        if (gap != JGeneratorSignal::kVoltsPerDiv) {
-            r.check(false, "lanes are one division apart");
-            return;
-        }
-    }
-    r.check(true, "every adjacent pair of lanes is exactly one division apart");
-
-    // And the whole stack lands inside the graticule rather than half off it.
-    const double halfSpan = (kDivisions / 2.0) * JGeneratorSignal::kVoltsPerDiv;
-    r.check(first + kSwing <= halfSpan,  "the top lane's high level is on screen");
-    r.check(last >= -halfSpan,           "the bottom lane's low level is on screen");
-}
-
 // The speed ceiling, checked against the OEM's own behaviour.
 //
 // These numbers were read off the OEM by driving it: with the pattern at its
@@ -241,7 +206,6 @@ int main() {
     testSpeedFollowsTheWheel(r);
     testSettersDoNotTouchTheDevice(r);
     testFlushDoesNotAbandonASequence(r);
-    testLanesStackWithoutOverlap(r);
     testSpeedCeilingMatchesTheInstrument(r);
     testCeilingFallsAsTheWheelGrows(r);
     return r.result();
