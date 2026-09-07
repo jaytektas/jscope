@@ -138,11 +138,12 @@ Codes 24 and above (100ms/div and slower) are the ones whose burst accumulators
 this driver's table zeroes, and three of the twelve presets sit there, so those
 setups are ROLL mode, not burst.
 
-## The startup chooser: twelve automotive setups
+## The startup chooser: 82 automotive setups
 
-The dialog the OEM opens before its main window is not just a module picker — it
-is a list of task PRESETS. Expanded in full, with the row index each leaf takes
-in the fully expanded tree:
+The dialog the OEM opens before its main window is not just a module picker --
+it is the entry point to a library of task PRESETS. The tree's leaves are
+CATEGORIES, not setups; each opens a list of specific tests, and it is that
+second level that holds the eighty-two.
 
 ```
  0 Module
@@ -157,11 +158,179 @@ in the fully expanded tree:
 20 +- Generator
 ```
 
+An earlier revision of this document counted those leaves and reported TWELVE
+setups. That was the tree one level too high: "Camshaft" is not a preset, it is
+four of them -- Inductive, AC Excited, Hall Effect and Bosch Common Rail Diesel
+-- and "Injector Diagnonis" is ten. The real figure is eighty-two.
+
 WHERE THE PRESETS LIVE. Not in data files. The install has only three .set files
-— lan.set, size.set and Default.set, none of them per-task — and Auto/wfm holds
-87 .amr files, which are HTK-DSO-AM REFERENCE WAVEFORMS (UTF-16 magic then
-float samples), not setups. The per-task configuration is compiled into
-Scope.exe.
+-- lan.set, size.set and Default.set, none of them per-task -- and the per-task
+configuration is compiled into Scope.exe. The NAMES, however, are not: they sit
+in plain text in `language/Lan_English.lug` at ids 10111-10192, which is how the
+full list below was read without touching the executable at all.
+
+### The .amr files are the other half of a preset
+
+`Auto/wfm` holds 87 files with an `HTK-DSO-AM` magic (UTF-16) followed by float
+samples. An earlier revision dismissed these as "reference waveforms, not
+setups" and moved on. That undersold them: a preset is a setup AND an example
+stream, and the .amr is the second half -- the trace the OEM draws so a
+technician can see what the signal is supposed to look like before deciding
+whether the one in front of them is faulty. A preset menu that sets the timebase
+but shows no reference is missing the half that makes these useful on a car.
+
+The two sets are related but NEITHER IS A SUBSET OF THE OTHER:
+
+| Group | Named tests | .amr files | |
+|---|---|---|---|
+| Sensors                   | 30 | 30 (`AM_SENSORS_*`)   | exact |
+| Actuators + Injectors     | 25 | 25 (`AM_ACTUATORS_*`) | exact |
+| Engine/Cranking + Charging| 11 | 11 (`AM_FL_*`, `AM_CS_*`) | exact |
+| Ignition                  | 12 | 15 (`AM_IGNITION_*`)  | three spare |
+| Bus                       |  4 |  6 (`AM_CAN_*`, `AM_BUS_*`) | two spare |
+| **Total**                 | **82** | **87** | |
+
+The .amr prefixes do NOT follow the menu grouping. `AM_CS_*` is not "charging
+system": it holds `RC_PETROL`, `RC_DIESEL` and `SVD`, which are the relative
+compression and starting-voltage-drop tests from the Engine group, alongside the
+four genuine charging ones. Group the files by prefix and the totals only
+reconcile once those three are moved across.
+
+Five files have no test to belong to:
+
+- `AM_BUS_FLEXRAY` and `AM_BUS_K` -- FlexRay and K-line reference waveforms with
+  no entry anywhere in the string table. Either the menu once offered them, or
+  they were prepared for a build that shipped without them.
+- `AM_IGNITION_AE`, `AM_IGNITION_ETEAS`, `AM_IGNITION_EUPSS` -- three ignition
+  traces that do not map onto the twelve named ignition tests.
+
+And one is simply litter: `AM_IGNITION_P_P - 副本.amr`, "副本" being Chinese for
+"copy" -- a duplicate someone left in the install, which is why the raw file
+count is 87 and the real one is 86.
+
+So some setups have no example stream, and some example streams have no setup.
+Any preset feature has to treat the reference trace as OPTIONAL rather than
+assuming one exists for every test.
+
+### The eighty-two
+
+Read from `language/Lan_English.lug`, ids 10111-10192, verbatim including the
+OEM's own spelling mistakes ("Diagnonis", "Single-ponit", "Engnie", "Igntion")
+-- they are recorded as found so a string can be matched against the file.
+
+**Ignition** (10111-10122)
+
+1. ECO TEC ECM to Ignition Amplifier Signal
+2. Primary Ignition (Voltage)
+3. Primary Ignition (Current)
+4. Primary Ignition (Voltage & Current)
+5. Primary Ignition & Crankshaft Sensor
+6. Primary Ignition & Secondary Ignition
+7. Secondary Ignition Distributor Type (Plug Lead)
+8. Secondary Ignition Distributor Type (King Lead)
+9. Secondary DIS (Positive-fired)
+10. Secondary DIS or CPC (Negative-fired)
+11. Secondary Coil Output Diagnosis
+12. Secondary Igntion & Primary Igntion
+
+**Sensors** (10123-10152)
+
+13. Accelerator Pedal
+14. ABS Digital Speed Sensor
+15. ABS Analog Speed Sensor
+16. Coolant Temperature (5V)
+17. Coolant Temperature (GM/Vauxhall Simtec
+18. Knock Sensor
+19. MAP Analog
+20. MAP Digital
+21. Hall Effect Road Speed Sensor
+22. Air Flow Meter (Hot Wire)
+23. Air Flow Meter (Air Vane)
+24. Air Flow Sensor(Bosch Diesel)
+25. Air Intake Pressure Sensor (Bosch Diesel)
+26. Camshaft (Inductive)
+27. Camshaft (AC Excited)
+28. Camshaft (Hall Effect)
+29. Camshaft (Bosch Common Rail Diesel)
+30. Crankshaft Inductive Running
+31. Crankshaft Inductive Cranking
+32. Crankshaft Hall Effect
+33. Crankshaft Sensor & Primary Ignition
+34. Distributor Pick-up (Hall Effect)
+35. Distributor Inductive Pick-up Cranking
+36. Distributor Inductive Pick-up Running
+37. Lambda Sensor Titania
+38. Lambda Sensor Zirconia
+39. Lambda Sensor Zirconia Pre & Post Cat
+40. Throttle Position Potentiometer
+41. Throttle Position Switch
+42. Throttle Pedal Switch (Bosch Diesel)
+
+**Bus** (10153-10156)
+
+43. CAN Bus Data View
+44. CAN Bus Signal Integrity
+45. CAN Bus LH Long Capture
+46. LIN Bus Engnie Off Diagnosis
+
+**Actuators** (10157-10171)
+
+47. Diesel Glow Plugs
+48. Electronic Fuel Pump
+49. Carbon Canister Solenoid Valve
+50. Exhaust Gas Recirculation Solenoid Valve
+51. Stepper Motor Example 1
+52. Stepper Motor Example 2
+53. Idle Speed Control Valve (Rotary)
+54. Idle Speed Control Valve (Electromagmetic)
+55. Throttle Servomotor (Idling)
+56. Throttle Servomotor (Accelerating)
+57. Bosch CDi 3 Quantity Control Valve
+58. Bosch CDi 3 Pressure Regulator Valve
+59. Variable-Speed Cooling Fan On
+60. Variable-Speed Cooling Fan Off
+61. Variable Valve Timing
+
+**Injectors** (10172-10181)
+
+62. Single-point Injector(Voltage)
+63. Single-ponit Injector(Current)
+64. Multi-point Injector(Voltage)
+65. Multi-point Injector(Current)
+66. Injector Voltage & Current
+67. Injector Current & Primary Ignition
+68. Common Rail Diesel(Current)
+69. Injector Bosch CDi 3 (Current)
+70. Injector Bosch Diesel(Idling)
+71. Injector Bosch Diesel(Accelerating)
+
+**Engine and cranking** (10182-10188)
+
+72. Cranking & Ignition Example 1
+73. Cranking & Ignition Example 2
+74. Engine Cranking (Vacuum) & Ignition
+75. Fuel Pressure Regulator (Vacuum)& Ingintion
+76. Relative Compression Petrol
+77. Relative Compression Diesel
+78. Starting Voltage Drop
+
+**Charging** (10189-10192)
+
+79. Charging Circuits Current/Voltage
+80. Charging Circuits Current/Voltage Starting 24V
+81. Charging Circuits Current/Voltage Idling 24V
+82. Charging Circuits Alternator AC Ripple/Diode Diagnosis
+
+Names and setup values are recorded here as FACTS about operating the
+instrument, which is what this document is for. The .amr sample data is Hantek's
+own content and is not reproduced here or anywhere in this repository -- a
+reference-trace feature has to draw on waveforms captured with this application,
+not on theirs.
+
+### The twelve with measured setups
+
+Of the eighty-two, twelve have been entered on the instrument and their settings
+read back. The rest are named but their values are NOT established.
 
 HOW THESE WERE READ. Entering each preset in the OEM and reading its screen.
 Two traps, both of which produced wrong tables before they were noticed:
@@ -180,6 +349,14 @@ Two traps, both of which produced wrong tables before they were noticed:
 
 The trigger is CH1 rising at 0.00uV and the acquisition mode is Auto in all
 twelve; only the columns below differ.
+
+ONE ROW IS AMBIGUOUS. "Secondary Ignition Distributor Type" is not a whole name
+in the string table -- ids 10117 and 10118 are the same words followed by
+"(Plug Lead)" and "(King Lead)". The title was recorded from the screen before
+the string table was read, so which of the two was measured is not established.
+The values are almost certainly right for both, since the pair differ in where
+the probe is clipped rather than in how the scope is set, but that is reasoning
+and not a measurement.
 
 | Preset (tree) | Title the OEM shows | Time/div | Channels | Volts/div | Probe | Coupling |
 |---|---|---|---|---|---|---|
