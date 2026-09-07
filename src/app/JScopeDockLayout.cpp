@@ -91,7 +91,7 @@ JScopeDockLayout::JScopeDockLayout(JAppWindow& window, JSceneGraph& graph,
     };
 
     JLOGC(JScopeLog::kUi, JLogLevel::Info)
-        << "dock layout built: Channels right, Timebase+Trigger left, "
+        << "dock layout built: Channels right, Timebase+Trigger+Generator left, "
            "Measure+Cursors bottom (Replay hidden until a capture is open)";
 }
 
