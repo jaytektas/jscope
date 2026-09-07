@@ -108,6 +108,14 @@ void JGeneratorPanel::rebuild(const JScopeCapabilities& caps) {
     m_teeth->setValue(static_cast<int>(maxTeeth));
     m_missing->setValue(static_cast<int>(std::min(kDefaultMissingTeeth, maxTeeth - 1)));
     m_syncing = false;
+
+    // AND SEND IT. Those setValue calls happen with m_syncing raised, which is what
+    // stops a programmatic update from being mistaken for the user turning a
+    // control -- but it also means the wheel just put in front of the user was
+    // never given to the generator, which went on holding its own default. The
+    // panel then showed 31 teeth while the device played eight steps, and the
+    // Generator Output view drew the device's version, which is how it was caught.
+    _pushPattern();
 }
 
 void JGeneratorPanel::_pushPattern() {

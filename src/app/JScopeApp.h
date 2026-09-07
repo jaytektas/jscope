@@ -5,6 +5,8 @@
 #include "JScopeSettings.h"
 #include "capture/JCaptureWriter.h"
 #include "scope/JScopeSession.h"
+#include "scope/JGeneratorSignal.h"
+#include "ui/JCentreDockHost.h"
 #include "ui/JTraceView.h"
 
 #include <j/app/JAppWindow.h>
@@ -90,6 +92,7 @@ public:
     JAppWindow&      window()    { return *m_window; }
     JScopeSession&   session()   { return m_session; }
     JTraceView&      traceView() { return *m_traceView; }
+    JCentreDockHost& centre()    { return *m_centre; }
     JScopeActions&    actions() { return m_actions; }
     JScopeDockLayout& docks()   { return *m_docks; }
 
@@ -124,6 +127,16 @@ private:
     JGuiApplication                   m_app;
     std::unique_ptr<JAppWindow>       m_window;
     std::unique_ptr<JTraceView>       m_traceView;
+
+    // The centre is a dock host rather than a bare trace: the live trace and the
+    // generator's own output are two views of the same instrument and belong side
+    // by side, tabbed or split, rather than one of them being exiled to a panel.
+    std::unique_ptr<JCentreDockHost>  m_centre;
+    std::unique_ptr<JDockWidget>      m_scopeDock;
+    std::unique_ptr<JTraceView>       m_generatorTrace;
+    std::unique_ptr<JDockWidget>      m_generatorTraceDock;
+    JGeneratorSignal                  m_generatorSignal;
+    void _refreshGeneratorTrace();
     JScopeSession                     m_session;
     JScopeActions                     m_actions{m_session};
     std::unique_ptr<JScopeDockLayout> m_docks;

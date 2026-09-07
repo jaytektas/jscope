@@ -86,7 +86,24 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
     JScopeTheme::reseedFromStyle();
 
     m_traceView = std::make_unique<JTraceView>(m_app.sceneGraph());
-    m_window->setCentralWidget(m_traceView.get());
+
+    // The centre is a dock host, and the live trace is the first dock in it. The
+    // trace used to BE the central widget; making it a dock instead is what lets
+    // the generator's own output sit beside it, tabbed or split, in the same space
+    // and drawn by the same renderer.
+    m_centre = std::make_unique<JCentreDockHost>(m_app.sceneGraph());
+    m_window->setCentralWidget(m_centre.get());
+
+    m_scopeDock = std::make_unique<JDockWidget>("Scope", 0.f, 0.f, 0.f, 0.f);
+    m_scopeDock->setContent(m_traceView.get());
+    m_centre->addDock(m_scopeDock.get());
+
+    // A second trace, showing what the generator is PUTTING OUT rather than
+    // anything measured — see JGeneratorSignal for why that is worth drawing and
+    // why it is drawn with the acquisition renderer rather than a second one.
+    m_generatorTrace = std::make_unique<JTraceView>(m_app.sceneGraph());
+    m_generatorTraceDock = std::make_unique<JDockWidget>("Generator Output", 0.f, 0.f, 0.f, 0.f);
+    m_generatorTraceDock->setContent(m_generatorTrace.get());
 
     m_docks = std::make_unique<JScopeDockLayout>(*m_window, m_app.sceneGraph(), m_actions,
                                                  m_traceView->cursors());
@@ -320,6 +337,10 @@ void JScopeApp::_wireActions() {
         if (JScopeDriver* d = m_session.driver()) {
             m_docks->syncFrom(*d);
             _syncViewFromDriver();
+            // The generator's picture is derived from its settings, so it is
+            // rebuilt whenever any of them move — including the wheel changing,
+            // which alters both the shape and the achievable speed.
+            _refreshGeneratorTrace();
         }
     });
 
@@ -613,6 +634,15 @@ void JScopeApp::_adoptOpenSession(const JScopeDeviceInfo& device) {
     // six dead ones behind.
     m_docks->rebuild(d->capabilities());
 
+    // The generator's output view belongs in the centre beside the live trace, and
+    // only when there is a generator to draw.
+    if (d->capabilities().generator.kind != JScopeGeneratorKind::None) {
+        if (!m_generatorTraceDock->isPlaced()) m_centre->addDock(m_generatorTraceDock.get());
+        _refreshGeneratorTrace();
+    } else if (m_generatorTraceDock->isPlaced()) {
+        m_centre->host().removeDock(m_generatorTraceDock.get());
+    }
+
     // The Instrument menu is built before any device is open, so it has nothing
     // to list until one answers. Rebuild it now that this one has.
     JScopeMenuBuilder::refreshInstrumentMenu(m_app.sceneGraph(), *this);
@@ -673,6 +703,38 @@ void JScopeApp::_adoptOpenSession(const JScopeDeviceInfo& device) {
                             "This instrument's waveform read is not implemented. Its"
                             " settings and generator work; the trace does not.");
     }
+}
+
+// The generator's output as a drawn frame. Rebuilt from the generator's own state
+// rather than remembered here, so it cannot describe a pattern that is no longer
+// loaded.
+namespace { constexpr double kHorizontalDivisionsForGenerator = 10.0; }
+
+void JScopeApp::_refreshGeneratorTrace() {
+    if (!m_generatorTrace) return;
+
+    const JPatternGenerator* g = m_actions.patternGenerator();
+    if (!g || g->pattern().empty() || g->actualRpm() == 0) {
+        m_generatorTrace->clearFrame();
+        return;
+    }
+
+    // One pass of the pattern is one revolution, so the frame spans exactly the
+    // time that revolution takes at the speed the device can actually run — the
+    // achievable speed, not the requested one, because this draws what comes out.
+    const double revolutionSeconds = 60.0 / static_cast<double>(g->actualRpm());
+    m_generatorSignal.build(g->pattern(), static_cast<uint8_t>(g->capabilities().patternOutputs),
+                            revolutionSeconds);
+    if (!m_generatorSignal.valid()) { m_generatorTrace->clearFrame(); return; }
+
+    const JScopeFrame& f = m_generatorSignal.frame();
+    for (uint8_t c = 0; c < f.header.channelCount; ++c)
+        m_generatorTrace->setChannelView(c, true, f.header.voltsPerDiv[c], 0.0, false,
+                                         JScopeCoupling::DC);
+    m_generatorTrace->setFrame(f);
+    m_generatorTrace->setTimeWindow(revolutionSeconds / kHorizontalDivisionsForGenerator);
+    m_generatorTrace->setLegend("Commanded", revolutionSeconds / kHorizontalDivisionsForGenerator,
+                                0, 0.0);
 }
 
 void JScopeApp::_syncViewFromDriver() {
