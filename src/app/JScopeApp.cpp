@@ -119,6 +119,12 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
     });
     m_generatorTraceDock = std::make_unique<JDockWidget>("Pulse Editor", 0.f, 0.f, 0.f, 0.f);
     m_generatorTraceDock->setContent(m_generatorTrace.get());
+    m_centre->addDock(m_generatorTraceDock.get());
+
+    // The trace is the front tab. Adding a dock makes it the active one, so this
+    // says which of the two the window opens on rather than leaving it to which
+    // was added last.
+    m_centre->host().activatePanelByTitle(m_scopeDock->title());
 
     m_docks = std::make_unique<JScopeDockLayout>(*m_window, m_app.sceneGraph(), m_actions,
                                                  m_traceView->cursors());
@@ -137,7 +143,7 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
 
     m_docks->registerToggle({ m_scopeDock.get(), &m_centre->host(), "Scope", false });
     m_docks->registerToggle({ m_generatorTraceDock.get(), &m_centre->host(),
-                              "Pulse Editor", true });
+                              "Pulse Editor", false });
 
     JScopeMenuBuilder::build(*m_window, m_app.sceneGraph(), *this);
     JScopeToolBarBuilder::build(*m_window, *this);
@@ -670,14 +676,10 @@ void JScopeApp::_adoptOpenSession(const JScopeDeviceInfo& device) {
     // six dead ones behind.
     m_docks->rebuild(d->capabilities());
 
-    // The generator's output view belongs in the centre beside the live trace, and
-    // only when there is a generator to draw.
-    if (d->capabilities().generator.kind != JScopeGeneratorKind::None) {
-        if (!m_generatorTraceDock->isPlaced()) m_centre->addDock(m_generatorTraceDock.get());
-        _refreshGeneratorTrace();
-    } else if (m_generatorTraceDock->isPlaced()) {
-        m_centre->host().removeDock(m_generatorTraceDock.get());
-    }
+    // The editor is part of this application rather than a capability of whatever
+    // is plugged in -- this binary drives one instrument and that instrument has a
+    // generator. It is built with the window and only filled in here.
+    _refreshGeneratorTrace();
 
     // The Instrument menu is built before any device is open, so it has nothing
     // to list until one answers. Rebuild it now that this one has.
