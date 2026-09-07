@@ -280,6 +280,10 @@ bool JHantek1008Driver::open(const JScopeDeviceInfo& device) {
     //
     // The output follows what it was, which is off unless it was deliberately
     // switched on: connecting a scope must not start driving eight wires.
+    // Started before anything else can go quiet on the bus.
+    m_keepAliveRunning.store(true);
+    m_keepAlive = std::thread(&JHantek1008Driver::_keepAliveLoop, this);
+
     // Safe to send from here: the acquisition thread is not started yet.
     if (!m_generator.flush())
         JLOGC(JScopeLog::kHantek, JLogLevel::Warn)
@@ -454,6 +458,9 @@ bool JHantek1008Driver::_applyConfigToDevice() {
 void JHantek1008Driver::close() {
     if (!m_open) return;
     stop();
+    // Stopped before the protocol is destroyed: it pings through it.
+    m_keepAliveRunning.store(false);
+    if (m_keepAlive.joinable()) m_keepAlive.join();
     // Detach BEFORE the protocol dies: the generator holds a raw pointer to it and
     // would otherwise be left aimed at freed memory until the next open.
     m_generator.attach(nullptr);
@@ -469,12 +476,30 @@ void JHantek1008Driver::close() {
 // it safely -- and the generator's bytes have to wait for it. While it is not
 // running there is no other thread to collide with, and waiting would mean a
 // control that does nothing until the user presses Run.
+// Ping while nothing else is using the bus. Ten milliseconds is the reference's
+// interval; the device wants to hear from the host and does not much care what.
+void JHantek1008Driver::_keepAliveLoop() {
+    JLOGC(JScopeLog::kHantek, JLogLevel::Debug) << "keep-alive up";
+    while (m_keepAliveRunning.load(std::memory_order_acquire)) {
+        if (!m_running.load(std::memory_order_acquire)) {
+            std::lock_guard<std::mutex> lk(m_busMutex);
+            // Re-checked under the lock: acquisition may have started while this
+            // was waiting for it, and then the bus is not ours to talk on.
+            if (!m_running.load(std::memory_order_acquire) && m_protocol)
+                m_protocol->ping();
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    JLOGC(JScopeLog::kHantek, JLogLevel::Debug) << "keep-alive down";
+}
+
 void JHantek1008Driver::_generatorChanged() {
     if (!m_open) return;
     if (m_running.load(std::memory_order_acquire)) {
         m_generatorDirty.store(true, std::memory_order_release);
         return;
     }
+    std::lock_guard<std::mutex> lk(m_busMutex);
     if (!m_generator.flush())
         JLOGC(JScopeLog::kHantek, JLogLevel::Warn)
             << "generator: " << m_generator.lastError();
@@ -604,8 +629,15 @@ bool JHantek1008Driver::start(JScopeAcquisitionMode mode) {
 }
 
 bool JHantek1008Driver::single() {
-    std::lock_guard<std::mutex> lk(m_cfgMutex);
-    const JScopeAcquisitionMode mode = m_timebase.mode;
+    // The mode is READ under the lock and the lock is then dropped. start() joins
+    // a retired acquisition thread, and that thread takes m_cfgMutex itself --
+    // holding it across the join is a deadlock waiting for the timing where the
+    // thread has not finished its last iteration.
+    JScopeAcquisitionMode mode;
+    {
+        std::lock_guard<std::mutex> lk(m_cfgMutex);
+        mode = m_timebase.mode;
+    }
     if (!start(mode)) return false;
     m_singleShot.store(true);
     return true;
@@ -869,6 +901,12 @@ void JHantek1008Driver::_runLoop() {
     bool modeStarted = false;
 
     while (m_running.load(std::memory_order_acquire)) {
+        // THE BUS IS OURS FOR A WHOLE ITERATION. The keep-alive pings whenever
+        // acquisition is not running, and a capture is a sequence -- arm, poll,
+        // read both halves -- that a ping dropped into the middle of would desync
+        // exactly the way a generator write from the UI thread once did.
+        std::lock_guard<std::mutex> busLock(m_busMutex);
+
         // Configuration changes are applied BETWEEN acquisitions, on this thread,
         // so the UI thread never touches USB and no mutex is held across a
         // transfer.

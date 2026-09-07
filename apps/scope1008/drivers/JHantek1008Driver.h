@@ -100,6 +100,21 @@ private:
 
     // Set when the generator changes while the acquisition thread is running, so
     // the bytes go out from THAT thread rather than from whoever moved the control.
+    // THE DEVICE DIES IF THE HOST GOES QUIET. It watchdogs the connection, and
+    // with no traffic it drops off the bus and re-enumerates -- which is exactly
+    // what a completed single shot used to do, because the acquisition thread
+    // retired and nothing took over. The reference keeps a thread pinging 0xf3
+    // every 10ms whenever it is not acquiring, and the OEM's own capture is more
+    // than half 0xf3 by volume.
+    std::thread        m_keepAlive;
+    std::atomic<bool>  m_keepAliveRunning{false};
+    void               _keepAliveLoop();
+
+    // ONE OWNER OF THE BUS AT A TIME. The keep-alive, the acquisition loop and a
+    // generator write from an idle device all talk to the same pipe; without this
+    // a ping lands in the middle of somebody else's transaction.
+    std::mutex         m_busMutex;
+
     std::atomic<bool>  m_generatorDirty{false};
     void               _generatorChanged();
 
