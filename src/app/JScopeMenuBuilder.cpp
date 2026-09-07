@@ -3,6 +3,8 @@
 
 #include "JScopeMenuBuilder.h"
 
+#include "JScopeAboutLogo.h"
+
 #include <j/core/Dialog.h>
 #include "JScopeApp.h"
 
@@ -301,6 +303,12 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
         JDialogRequest req;
         req.kind  = JDialogRequest::JKind::Message;
         req.title = "About jscope";
+        // Raw RGBA rather than a PNG: see JScopeAboutLogo for why nothing decodes
+        // anything. The dialog owns a copy and uploads it into its own HAL.
+        req.imageRgba.assign(JScopeAboutLogo::kRgba,
+                             JScopeAboutLogo::kRgba + JScopeAboutLogo::byteCount());
+        req.imageWidth  = JScopeAboutLogo::kWidth;
+        req.imageHeight = JScopeAboutLogo::kHeight;
         req.body  =
             "jscope " JSCOPE_VERSION "\n"
             "An oscilloscope front end for the Hantek 1008C.\n"
