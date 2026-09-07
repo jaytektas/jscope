@@ -4,6 +4,7 @@
 #include "JScopeMenuBuilder.h"
 
 #include "JScopeAboutLogo.h"
+#include "JScopeHelp.h"
 
 #include <j/core/Dialog.h>
 #include "JScopeApp.h"
@@ -299,6 +300,31 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
     // anyway, so it goes here rather than being printed at startup where nobody
     // running a GUI would see it.
     JMenu* help = newMenu("Help");
+
+    // A topic per dialog rather than one long document: each is a thing somebody
+    // arrives wanting to know, and a reader who wants one paragraph should not
+    // have to scroll past four.
+    for (const JScopeHelp::JTopic& topic : JScopeHelp::topics()) {
+        const std::string title = topic.title;
+        const std::string body  = topic.body;
+        help->add(graph, title)->onTriggered.connect([title, body] {
+            JDialogRequest req;
+            req.kind  = JDialogRequest::JKind::Message;
+            req.title = title;
+            req.body  = body;
+            JDialogManager::instance().push(std::move(req));
+        });
+    }
+
+    // Generated from the shortcut table, so it cannot disagree with the keys.
+    help->add(graph, "Keyboard Shortcuts")->onTriggered.connect([] {
+        JDialogRequest req;
+        req.kind  = JDialogRequest::JKind::Message;
+        req.title = "Keyboard Shortcuts";
+        req.body  = JScopeHelp::shortcuts();
+        JDialogManager::instance().push(std::move(req));
+    });
+
     help->add(graph, "About jscope")->onTriggered.connect([] {
         JDialogRequest req;
         req.kind  = JDialogRequest::JKind::Message;
