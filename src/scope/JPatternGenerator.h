@@ -45,6 +45,12 @@ public:
     // What actualRpm() would be for this request, without asking the device to do
     // it. The UI needs to show the consequence of a speed before it is committed.
     virtual uint32_t achievableRpm(uint32_t rpm) const = 0;
+
+    // THE CEILING FOR THE PATTERN CURRENTLY LOADED, which is not a constant: the
+    // device has a minimum time per step, so a longer pattern cannot be played as
+    // fast. It changes whenever the pattern does, which is why it is asked for
+    // rather than published once in capabilities().
+    virtual uint32_t maxRpm() const = 0;
 };
 
 } // inline namespace jf

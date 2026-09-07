@@ -232,10 +232,34 @@ struct JHantek1008Tables {
     // this is the honest limit rather than kMaxPatternLength.
     static constexpr uint32_t kMaxPatternPerPacket  = 62;
 
-    // Above 750k the reference notes the first parameter byte becomes 0x02 and the
-    // encoding changes in a way it never worked out. Refused rather than guessed.
+    // THE DEVICE CANNOT STEP FASTER THAN THIS, and it is the limit that actually
+    // bites. Measured from the OEM: with the pattern at its full 1440 steps the
+    // achievable speed clamps at 30,321 rpm, and at 10 steps at 4,266,282 rpm.
+    // Solving both for the pulse length gives 65.96 and 67.5 ticks -- the same
+    // floor at two ends of a 144x range, so it is hardware and not a UI cap.
+    //
+    // The previous code assumed a pulse could be ONE tick. That made the ceiling
+    // ~66x too high: it would have accepted 750,000 rpm on a 1440-step pattern
+    // when the device tops out at thirty thousand.
+    static constexpr uint32_t kMinPulseLengthTicks  = 66;
+
+    // A SEPARATE limit, and not the same kind of thing. Above 750k rpm the
+    // reference observed the first parameter byte of 0xb9 become 0x02 and the
+    // encoding change in a way it never worked out. The OEM plainly does use that
+    // second encoding -- it reaches 4.27M rpm -- but until it is understood this
+    // driver cannot, so speeds needing it are refused rather than guessed.
     static constexpr uint32_t kMinGeneratorRpm      = 1;
-    static constexpr uint32_t kMaxGeneratorRpm      = 750000;
+    static constexpr uint32_t kMaxEncodableRpm      = 750000;
+
+    // What this driver will actually accept for a given pattern: whichever of the
+    // two limits comes first. Both bite somewhere in the usable range -- the step
+    // rate on long patterns, the encoding on short ones.
+    static constexpr uint32_t maxRpmFor(uint32_t steps) {
+        if (steps == 0) return 0;
+        const uint32_t byStepRate = static_cast<uint32_t>(
+            (60.0 * kGeneratorClockHz) / (double(steps) * kMinPulseLengthTicks));
+        return byStepRate < kMaxEncodableRpm ? byStepRate : kMaxEncodableRpm;
+    }
 
     // The device counts whole ticks, so most requested speeds are not achievable
     // exactly -- which is why the OEM shows "Set Speed" and "Real Speed" as two

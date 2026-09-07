@@ -38,15 +38,21 @@ JHantek1008PatternGenerator::JHantek1008PatternGenerator(std::mutex& deviceMutex
     // one, because the UI builds itself from this.
     m_caps.maxPatternLength = JHantek1008Tables::kMaxPatternPerPacket;
     m_caps.minRpm           = JHantek1008Tables::kMinGeneratorRpm;
-    m_caps.maxRpm           = JHantek1008Tables::kMaxGeneratorRpm;
+    // The absolute ceiling, for a pattern short enough that the step rate is not
+    // what stops it. maxRpm() gives the one that applies to the pattern loaded.
+    m_caps.maxRpm           = JHantek1008Tables::kMaxEncodableRpm;
 
     m_pattern.assign(std::begin(kDefaultPattern), std::end(kDefaultPattern));
     m_requestedRpm = kDefaultRpm;
     m_actualRpm    = achievableRpm(kDefaultRpm);
 }
 
+uint32_t JHantek1008PatternGenerator::maxRpm() const {
+    return JHantek1008Tables::maxRpmFor(static_cast<uint32_t>(m_pattern.size()));
+}
+
 uint32_t JHantek1008PatternGenerator::achievableRpm(uint32_t rpm) const {
-    if (rpm < m_caps.minRpm || rpm > m_caps.maxRpm || m_pattern.empty()) return 0;
+    if (rpm < m_caps.minRpm || rpm > maxRpm() || m_pattern.empty()) return 0;
     const uint32_t steps = static_cast<uint32_t>(m_pattern.size());
     const uint32_t pulse = JHantek1008Tables::pulseLengthFor(rpm, steps);
     if (pulse == 0) return 0;   // faster than one tick per step
@@ -76,9 +82,13 @@ bool JHantek1008PatternGenerator::setPattern(const std::vector<uint8_t>& pattern
 }
 
 bool JHantek1008PatternGenerator::setRpm(uint32_t rpm) {
-    if (rpm < m_caps.minRpm || rpm > m_caps.maxRpm) {
+    // The ceiling depends on the pattern loaded now, not on a fixed capability:
+    // a longer pattern needs more steps per revolution and the device has a
+    // minimum time per step.
+    if (rpm < m_caps.minRpm || rpm > maxRpm()) {
         m_lastError = "speed outside " + std::to_string(m_caps.minRpm) + ".." +
-                      std::to_string(m_caps.maxRpm) + " rpm";
+                      std::to_string(maxRpm()) + " rpm for a " +
+                      std::to_string(m_pattern.size()) + "-step pattern";
         return false;
     }
 

@@ -189,6 +189,49 @@ void testLanesStackWithoutOverlap(JTestReport& r) {
     r.check(last >= -halfSpan,           "the bottom lane's low level is on screen");
 }
 
+// The speed ceiling, checked against the OEM's own behaviour.
+//
+// These numbers were read off the OEM by driving it: with the pattern at its
+// full 1440 steps, asking for 67,999,999 rpm gave a Real Speed of 30,321, and at
+// 10 steps it allows 4,266,282. The earlier model assumed a pulse could be one
+// clock tick and so put the ceiling ~66x too high -- it would have accepted
+// 750,000 rpm on a pattern the device tops out at thirty thousand for.
+void testSpeedCeilingMatchesTheInstrument(JTestReport& r) {
+    using T = JHantek1008Tables;
+
+    // Within a rounding of the observed 30,321.
+    const uint32_t at1440 = T::maxRpmFor(1440);
+    r.check(at1440 > 30000 && at1440 < 30600,
+            "a 1440-step pattern tops out near the 30,321 rpm the OEM reports");
+
+    // The ceiling is a rate limit, so halving the pattern doubles it.
+    r.check(T::maxRpmFor(720) == 2 * T::maxRpmFor(1440) ||
+            T::maxRpmFor(720) == 2 * T::maxRpmFor(1440) + 1,
+            "halving the pattern doubles the ceiling: it is a step-rate limit");
+
+    // Short patterns hit the OTHER limit first -- the encoding this driver cannot
+    // produce -- so the ceiling stops rising rather than running away.
+    r.check(T::maxRpmFor(8) == T::kMaxEncodableRpm,
+            "a short pattern is capped by the encoding, not the step rate");
+    r.check(T::maxRpmFor(62) < T::kMaxEncodableRpm,
+            "the longest pattern this driver can write is capped by the step rate");
+
+    r.check(T::maxRpmFor(0) == 0, "a pattern with no steps has no speed");
+}
+
+// A wheel the user grows must not silently keep a speed the device can no longer
+// reach. This is the case the OEM shows as a moving maximum.
+void testCeilingFallsAsTheWheelGrows(JTestReport& r) {
+    using T = JHantek1008Tables;
+    uint32_t previous = T::maxRpmFor(JCrankWheel::stepsFor(1));
+    for (uint32_t teeth = 2; teeth <= 31; ++teeth) {
+        const uint32_t now = T::maxRpmFor(JCrankWheel::stepsFor(teeth));
+        if (now > previous) { r.check(false, "the ceiling never rises as teeth are added"); return; }
+        previous = now;
+    }
+    r.check(true, "the ceiling falls monotonically as the wheel gains teeth");
+}
+
 } // namespace
 
 int main() {
@@ -199,5 +242,7 @@ int main() {
     testSettersDoNotTouchTheDevice(r);
     testFlushDoesNotAbandonASequence(r);
     testLanesStackWithoutOverlap(r);
+    testSpeedCeilingMatchesTheInstrument(r);
+    testCeilingFallsAsTheWheelGrows(r);
     return r.result();
 }

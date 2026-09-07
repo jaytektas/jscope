@@ -131,15 +131,28 @@ void JGeneratorPanel::_pushPattern() {
     if (pattern.empty()) return;
 
     m_actions.setGeneratorPattern(pattern);
-    // The step count just changed, so the achievable speed has too, even though
-    // nobody touched the speed box.
+    // The step count just changed, so both the achievable speed AND the CEILING
+    // have moved, even though nobody touched the speed box. The device has a
+    // minimum time per step, so a longer wheel simply cannot be spun as fast.
+    if (const JPatternGenerator* g = m_actions.patternGenerator()) {
+        const uint32_t ceiling = g->maxRpm();
+        m_syncing = true;
+        m_rpm->setRange(static_cast<int>(g->capabilities().minRpm), static_cast<int>(ceiling));
+        if (static_cast<uint32_t>(m_rpm->value()) > ceiling)
+            m_rpm->setValue(static_cast<int>(ceiling));
+        m_syncing = false;
+    }
     _showSpeeds();
 }
 
 void JGeneratorPanel::_showSpeeds() {
     if (!m_realRpm) return;
     const JPatternGenerator* g = m_actions.patternGenerator();
-    m_realRpm->setText(g ? rpmText(g->actualRpm()) : "—");
+    if (!g) { m_realRpm->setText("—"); return; }
+    // The ceiling is worth showing beside the achieved speed: it moves with the
+    // wheel, and without it a speed box that silently refuses looks broken.
+    m_realRpm->setText(rpmText(g->actualRpm()) + "  (max " +
+                       std::to_string(g->maxRpm()) + ")");
 }
 
 void JGeneratorPanel::syncFrom(const JScopeDriver& driver) {

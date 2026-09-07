@@ -48,6 +48,7 @@ public:
     uint32_t requestedRpm() const override { return m_requestedRpm; }
     uint32_t actualRpm() const override    { return m_actualRpm; }
     uint32_t achievableRpm(uint32_t rpm) const override;
+    uint32_t maxRpm() const override;
 
     // THE PROTOCOL ONLY EXISTS WHILE THE DEVICE IS OPEN, and this outlives it, so
     // the driver hands it over on open and takes it away on close. Detached, the
