@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jason Roughley <pis.controller@gmail.com>
+
 #include "measure/JMeasurementEngine.h"
 #include "support/JTestReport.h"
 #include "support/JWaveformFixture.h"

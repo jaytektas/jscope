@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jason Roughley <pis.controller@gmail.com>
+
 // Brings up the real Hantek 1008C and reports what it does.
 //
 // A bench tool: it needs the instrument, so it is EXCLUDE_FROM_ALL and never

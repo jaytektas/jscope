@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jason Roughley <pis.controller@gmail.com>
+
 // Lists what is on the USB bus and whether this process can actually claim it.
 //
 // A bench tool, not a test: it needs hardware, so it is EXCLUDE_FROM_ALL and is

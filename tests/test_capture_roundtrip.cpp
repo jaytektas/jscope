@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jason Roughley <pis.controller@gmail.com>
+
 #include "capture/JCaptureReader.h"
 #include "capture/JCaptureWriter.h"
 #include "support/JTestReport.h"

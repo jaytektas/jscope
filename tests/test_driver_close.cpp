@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jason Roughley <pis.controller@gmail.com>
+
 // close() must JOIN the acquisition thread before it destroys anything that
 // thread is using, and before the std::thread member itself is destroyed — a
 // thread still joinable when its owner dies calls std::terminate outright.

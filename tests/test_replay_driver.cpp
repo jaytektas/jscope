@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jason Roughley <pis.controller@gmail.com>
+
 #include "capture/JCaptureWriter.h"
 #include "sources/JReplayDriver.h"
 #include "scope/JScopeDriverRegistry.h"

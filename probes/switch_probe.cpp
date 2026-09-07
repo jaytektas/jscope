@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Jason Roughley <pis.controller@gmail.com>
+
 // Reproduce a device SWITCH the way the Device menu does it: one instrument open
 // and running, then another chosen, which closes the first and opens the second
 // on the connect worker.
