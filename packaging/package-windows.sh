@@ -124,6 +124,12 @@ To fix that, once, with the scope plugged in:
      It will probably be called "YDJ-2088" rather than anything with Hantek in
      the name. That is normal -- the device identifies itself as a generic OEM
      part, which is also why jscope matches it by USB ID and never by name.
+
+     CHECK THE USB ID, NOT THE NAME, AND CHECK IT TWICE. "List All Devices"
+     shows every USB device on the machine, including your keyboard and mouse,
+     and Zadig will replace the driver on whichever one is selected. Doing that
+     to an input device leaves you with no way to undo it except another
+     keyboard. The ID field must read 0783 5725 before you click anything.
   5. Choose WinUSB as the driver on the right, and click Replace Driver.
   6. Unplug the scope and plug it back in.
 
