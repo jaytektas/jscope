@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(jscope CXX)
+project(jscope VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -99,9 +99,12 @@ target_link_libraries(scope_ui PUBLIC JFramework::platform scope_core)
 target_precompile_headers(scope_ui PRIVATE ${SCOPE_PCH_UI})
 
 # ---- one executable per instrument ------------------------------------------
+# One source of truth for the version: CMake's, handed to the code rather than
+# restated in a header where the two could drift.
 function(scope_app name entry driver_src app_dir)
     add_executable(${name} ${entry} ${driver_src} ${SCOPE_SHELL_SRC})
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${app_dir})
+    target_compile_definitions(${name} PRIVATE JSCOPE_VERSION="${PROJECT_VERSION}")
     target_link_libraries(${name} PRIVATE scope_ui scope_core JFramework::platform
                                           PkgConfig::LIBUSB Threads::Threads)
     # WM_CLASS is an X11 property, so the code that sets it and the library it

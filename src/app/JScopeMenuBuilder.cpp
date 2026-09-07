@@ -289,6 +289,34 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
         app.actions().downloadGeneratorPattern();
     });
 
+    // Help, and an About that carries the GPL's Appropriate Legal Notices.
+    //
+    // Not decoration: section 5(d) asks an interactive program to show the
+    // copyright, the absence of warranty, that it may be redistributed under the
+    // licence, and where to read it. This is where a user would look for that
+    // anyway, so it goes here rather than being printed at startup where nobody
+    // running a GUI would see it.
+    JMenu* help = newMenu("Help");
+    help->add(graph, "About jscope")->onTriggered.connect([] {
+        JDialogRequest req;
+        req.kind  = JDialogRequest::JKind::Message;
+        req.title = "About jscope";
+        req.body  =
+            "jscope " JSCOPE_VERSION "\n"
+            "An oscilloscope front end for the Hantek 1008C.\n"
+            "\n"
+            "Copyright (C) 2026 Jason Roughley <pis.controller@gmail.com>\n"
+            "\n"
+            "This program comes with ABSOLUTELY NO WARRANTY.\n"
+            "It is free software, and you are welcome to redistribute it under\n"
+            "the terms of the GNU General Public License, version 3 or later.\n"
+            "See the LICENSE file, or <https://www.gnu.org/licenses/gpl-3.0.html>.\n"
+            "\n"
+            "Built on JFramework. Uses libusb (LGPL-2.1-or-later);\n"
+            "its source is in third_party/libusb-win.";
+        JDialogManager::instance().push(std::move(req));
+    });
+
     JMenu* view = newMenu("View");
     view->add(graph, "Reset Zoom")->onTriggered.connect([&app] {
         JLOGC(JScopeLog::kUi, JLogLevel::Info) << "reset zoom";
@@ -312,7 +340,7 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
     // number somebody has to remember to update. It said "3 menus" while adding
     // five, having been written when there were three -- the same drift that left
     // the dock layout line describing a layout the app no longer builds.
-    const std::vector<JMenu*> bar = { file, acquire, device, instrument, generator, view };
+    const std::vector<JMenu*> bar = { file, acquire, device, instrument, generator, view, help };
     for (JMenu* m : bar) window.menuBar().addMenu(m);
 
     // COUNTED, not stated. This line claimed three menus while five were being
