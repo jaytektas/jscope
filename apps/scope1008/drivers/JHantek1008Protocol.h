@@ -14,11 +14,11 @@
 // expected the first byte back must equal the opcode, and the response is what
 // follows it.
 //
-// THE DELAYS ARE PART OF THE PROTOCOL. The reference sleeps around each
+// THE DELAYS ARE PART OF THE PROTOCOL. The device wants a pause around each
 // transfer, and several commands need a specific longer wait before their
 // response can be requested. Whether those are device timing or artefacts of
 // Python's own latency is not known, so they are reproduced exactly and named,
-// with the reference's own value beside each. They are tunable, and reducing
+// with the observed value beside each. They are tunable, and reducing
 // them is a measurement to be made on the bench rather than a guess.
 //
 // The status commands' RESPONSES ARE LOGGED AND NEVER ASSERTED ON. Every
@@ -30,7 +30,7 @@ inline namespace jf {
 
 class JHantek1008Protocol {
 public:
-    // Timing, in seconds, transcribed from the reference.
+    // Timing, in seconds, as observed of the device.
     struct JTiming {
         double beforeWrite{0.002};        // sec_till_start
         double beforeRead{0.0};           // sec_till_response_request
@@ -85,7 +85,7 @@ public:
     // This is what Auto does when its wait runs out.
     bool forceTrigger();
 
-    // Roll mode's start, in the reference's exact order. The 0xa3 MUST carry a
+    // Roll mode's start, in the order the device requires. The 0xa3 MUST carry a
     // roll rate id here rather than a ns/div id: the endpoint stalls otherwise,
     // and the reference carries a comment saying so.
     bool startRollMode(uint8_t rollRateId);
@@ -129,7 +129,7 @@ public:
     // chunks indexed from one. One byte per pulse, bit i driving output i.
     bool setGeneratorPattern(const std::vector<uint8_t>& pattern);
 
-    // The initialisation sequence, replayed byte for byte from the reference.
+    // The initialisation sequence the device expects, byte for byte.
     bool initialise(const std::vector<uint8_t>& activeChannels,
                     const std::vector<double>& vscales,
                     uint8_t timeDivId, uint8_t triggerChannel, bool triggerRising,

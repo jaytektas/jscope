@@ -333,7 +333,7 @@ struct JHantek1008Tables {
     // ---- protocol opcodes ----------------------------------------------------
     // Named where the reference gave a meaning, and left as raw hex where it did
     // not. Several of these are vendor magic whose purpose is unknown; the
-    // sequence is replayed byte for byte because that is the only thing known to
+    // sequence is reproduced byte for byte because that is the only thing known to
     // work.
     enum JCommand : uint8_t {
         kSetActiveChannelCount = 0xa0,   // + count
