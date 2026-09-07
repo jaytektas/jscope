@@ -63,14 +63,16 @@ bool JHantek1008PatternGenerator::setPattern(const std::vector<uint8_t>& pattern
         return false;
     }
 
-    std::lock_guard<std::mutex> lk(m_deviceMutex);
-    m_pattern   = pattern;
-    // The step rate is per revolution, so a new step count means a new pulse
-    // length for the SAME speed. Recomputed here, sent below.
-    m_actualRpm = achievableRpm(m_requestedRpm);
-
-    if (!m_protocol) return true;   // remembered; applied when the device opens
-    return _sendPattern() && _sendSpeed();
+    {
+        std::lock_guard<std::mutex> lk(m_deviceMutex);
+        m_pattern = pattern;
+        // The step rate is per revolution, so a new step count means a new pulse
+        // length for the SAME speed.
+        m_actualRpm = achievableRpm(m_requestedRpm);
+        m_dirty     = true;
+    }
+    if (m_onChanged) m_onChanged();
+    return true;
 }
 
 bool JHantek1008PatternGenerator::setRpm(uint32_t rpm) {
@@ -80,48 +82,55 @@ bool JHantek1008PatternGenerator::setRpm(uint32_t rpm) {
         return false;
     }
 
-    std::lock_guard<std::mutex> lk(m_deviceMutex);
-    m_requestedRpm = rpm;
-    m_actualRpm    = achievableRpm(rpm);
-    if (m_actualRpm == 0) {
-        m_lastError = "that speed needs less than one clock tick per step";
-        return false;
+    {
+        std::lock_guard<std::mutex> lk(m_deviceMutex);
+        m_requestedRpm = rpm;
+        m_actualRpm    = achievableRpm(rpm);
+        if (m_actualRpm == 0) {
+            m_lastError = "that speed needs less than one clock tick per step";
+            return false;
+        }
+        m_dirty = true;
     }
-
-    if (!m_protocol) return true;
-    return _sendSpeed();
+    if (m_onChanged) m_onChanged();
+    return true;
 }
 
 bool JHantek1008PatternGenerator::setOutputEnabled(bool on) {
-    std::lock_guard<std::mutex> lk(m_deviceMutex);
-    m_outputEnabled = on;
-    if (!m_protocol) return true;
-
-    // Turning on sends the pattern and speed first. The device keeps whatever it
-    // was last given, which after a replug is nothing at all, and switching on a
-    // stale or absent pattern puts an unexpected signal on eight wires that are
-    // probably connected to something.
-    if (on && !(_sendPattern() && _sendSpeed())) return false;
-
-    if (!m_protocol->setGeneratorOutput(on)) {
-        m_lastError = m_protocol->lastError();
-        return false;
+    {
+        std::lock_guard<std::mutex> lk(m_deviceMutex);
+        m_outputEnabled = on;
+        m_dirty         = true;
     }
-    JLOGC(JScopeLog::kScope, JLogLevel::Info)
-        << "generator output " << (on ? "on" : "off")
-        << " — " << m_pattern.size() << " steps at " << m_actualRpm << " rpm";
+    if (m_onChanged) m_onChanged();
     return true;
 }
 
-bool JHantek1008PatternGenerator::reapply() {
+bool JHantek1008PatternGenerator::flush() {
     std::lock_guard<std::mutex> lk(m_deviceMutex);
     if (!m_protocol) return false;
-    if (!_sendPattern() || !_sendSpeed()) return false;
-    if (!m_protocol->setGeneratorOutput(m_outputEnabled)) {
-        m_lastError = m_protocol->lastError();
-        return false;
+    m_dirty = false;   // cleared first: a failed send is not retried in a tight loop
+
+    // ORDER MATTERS AND THE SEQUENCE IS NEVER ABANDONED HALFWAY. The pattern write
+    // is three commands, and stopping between them leaves the device waiting for
+    // the rest -- which is what turned one bad reply into a pipe that timed out on
+    // everything afterwards. Each step's result is kept and the sequence runs to
+    // the end regardless.
+    const bool pattern = _sendPattern();
+    const bool speed   = _sendSpeed();
+    const bool output  = m_protocol->setGeneratorOutput(m_outputEnabled);
+    if (!output) m_lastError = m_protocol->lastError();
+
+    if (pattern && speed && output) {
+        JLOGC(JScopeLog::kScope, JLogLevel::Info)
+            << "generator: " << m_pattern.size() << " steps at " << m_actualRpm
+            << " rpm, output " << (m_outputEnabled ? "on" : "off");
+        return true;
     }
-    return true;
+    JLOGC(JScopeLog::kScope, JLogLevel::Warn)
+        << "generator not fully applied (pattern " << pattern << " speed " << speed
+        << " output " << output << "): " << m_lastError;
+    return false;
 }
 
 bool JHantek1008PatternGenerator::_sendPattern() {

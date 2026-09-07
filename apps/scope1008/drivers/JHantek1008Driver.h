@@ -98,6 +98,11 @@ private:
     JHantek1008Calibration                m_calibration;
     std::string                           m_calibrationPath;
 
+    // Set when the generator changes while the acquisition thread is running, so
+    // the bytes go out from THAT thread rather than from whoever moved the control.
+    std::atomic<bool>  m_generatorDirty{false};
+    void               _generatorChanged();
+
     mutable std::mutex m_cfgMutex;
     // Declared after the mutex it borrows, so it is destroyed before it.
     JHantek1008PatternGenerator m_generator{m_cfgMutex};

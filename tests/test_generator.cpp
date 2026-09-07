@@ -1,7 +1,11 @@
 #include "scope/JCrankWheel.h"
+#include "drivers/JHantek1008PatternGenerator.h"
+#include "drivers/JHantek1008Protocol.h"
 #include "drivers/JHantek1008Tables.h"
 #include "support/JTestReport.h"
+#include "support/JUsbTranscriptTransport.h"
 
+#include <mutex>
 #include <vector>
 
 using namespace jf;
@@ -94,6 +98,62 @@ void testSpeedFollowsTheWheel(JTestReport& r) {
     r.check(b != fast, "the 62-step one does not, and saying otherwise would misreport it");
 }
 
+// THE BUG THIS EXISTS TO PREVENT.
+//
+// The generator used to write to the device from whichever thread moved the
+// control. The acquisition thread holds no lock while it runs a capture -- it
+// copies the configuration and releases -- so those writes landed inside another
+// transaction: a pattern write during a running capture read back 0x1c, a byte of
+// somebody else's answer, and every read afterwards timed out.
+//
+// The rule is that a setter records and nothing more. It is checked by counting
+// bytes on the wire, because that is the thing that was wrong; asserting on a
+// dirty flag would pass just as happily with the sends put back.
+void testSettersDoNotTouchTheDevice(JTestReport& r) {
+    JUsbTranscriptTransport t;
+    JHantek1008Protocol p(t, 0x02, 0x81);
+    std::mutex deviceMutex;
+    JHantek1008PatternGenerator g(deviceMutex);
+    g.attach(&p);
+
+    r.check(g.setRpm(900),                       "a speed is accepted");
+    r.check(g.setPattern({ 0x01, 0x00 }),        "a pattern is accepted");
+    r.check(g.setOutputEnabled(true),            "an output switch is accepted");
+    r.check(t.writes().empty(),
+            "and NOTHING went to the device: the caller's thread does not own the pipe");
+    r.check(g.isDirty(), "the change is remembered as pending instead");
+
+    // flush() is what sends, and it is called only where the pipe is owned.
+    for (uint8_t op : { JHantek1008Tables::kGeneratorEnable, JHantek1008Tables::kGeneratorLength,
+                        JHantek1008Tables::kGeneratorWaveform, JHantek1008Tables::kGeneratorSpeed,
+                        JHantek1008Tables::kGeneratorEnable, JHantek1008Tables::kGeneratorSwitch })
+        t.queueEchoedReply(op);
+
+    r.check(g.flush(), "flush sends the whole state");
+    r.check(!t.writes().empty(), "and only then do bytes appear on the wire");
+    r.check(!g.isDirty(), "after which nothing is pending");
+}
+
+// A pattern write is three commands. Stopping between them leaves the device
+// waiting for the rest, which is how one bad reply became a pipe that timed out
+// on everything afterwards.
+void testFlushDoesNotAbandonASequence(JTestReport& r) {
+    JUsbTranscriptTransport t;
+    JHantek1008Protocol p(t, 0x02, 0x81);
+    std::mutex deviceMutex;
+    JHantek1008PatternGenerator g(deviceMutex);
+    g.attach(&p);
+
+    // Answer the first command wrongly, so the pattern write fails at its start.
+    t.queueEchoedReply(JHantek1008Tables::kGeneratorSpeed);   // wrong echo for 0xb7
+    for (int i = 0; i < 8; ++i) t.queueEchoedReply(JHantek1008Tables::kGeneratorSwitch);
+
+    const bool ok = g.flush();
+    r.check(!ok, "a refused command is reported as a failure");
+    r.check(t.writes().size() > 1,
+            "but the sequence still runs to the end rather than leaving the device mid-command");
+}
+
 } // namespace
 
 int main() {
@@ -101,5 +161,7 @@ int main() {
     testWheelPattern(r);
     testWheelFitsTheDevice(r);
     testSpeedFollowsTheWheel(r);
+    testSettersDoNotTouchTheDevice(r);
+    testFlushDoesNotAbandonASequence(r);
     return r.result();
 }

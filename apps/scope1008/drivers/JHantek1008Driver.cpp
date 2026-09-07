@@ -237,6 +237,7 @@ bool JHantek1008Driver::open(const JScopeDeviceInfo& device) {
     m_protocol = std::make_unique<JHantek1008Protocol>(
         m_usb, m_usb.bulkOutEndpoint(), m_usb.bulkInEndpoint());
     m_generator.attach(m_protocol.get());
+    m_generator.setChangeHandler([this] { _generatorChanged(); });
 
     m_caps.serialNumber = device.serialNumber;
 
@@ -279,7 +280,8 @@ bool JHantek1008Driver::open(const JScopeDeviceInfo& device) {
     //
     // The output follows what it was, which is off unless it was deliberately
     // switched on: connecting a scope must not start driving eight wires.
-    if (!m_generator.reapply())
+    // Safe to send from here: the acquisition thread is not started yet.
+    if (!m_generator.flush())
         JLOGC(JScopeLog::kHantek, JLogLevel::Warn)
             << "generator setup was not accepted: " << m_generator.lastError();
 
@@ -460,6 +462,22 @@ void JHantek1008Driver::close() {
     m_open = false;
     _setState(JScopeState::Closed);
     JLOGC(JScopeLog::kHantek, JLogLevel::Info) << "1008C closed";
+}
+
+// WHOSE THREAD SENDS. While the acquisition thread is running it owns the bulk
+// pipe -- it holds no lock across a capture, so there is no way to interleave with
+// it safely -- and the generator's bytes have to wait for it. While it is not
+// running there is no other thread to collide with, and waiting would mean a
+// control that does nothing until the user presses Run.
+void JHantek1008Driver::_generatorChanged() {
+    if (!m_open) return;
+    if (m_running.load(std::memory_order_acquire)) {
+        m_generatorDirty.store(true, std::memory_order_release);
+        return;
+    }
+    if (!m_generator.flush())
+        JLOGC(JScopeLog::kHantek, JLogLevel::Warn)
+            << "generator: " << m_generator.lastError();
 }
 
 bool JHantek1008Driver::applyChannel(uint8_t ch, const JScopeChannelConfig& cfg) {
@@ -854,6 +872,15 @@ void JHantek1008Driver::_runLoop() {
         // Configuration changes are applied BETWEEN acquisitions, on this thread,
         // so the UI thread never touches USB and no mutex is held across a
         // transfer.
+        // The generator goes out here for the same reason and in the same place:
+        // this thread owns the pipe between captures. A change made while running
+        // waits for this point rather than being written underneath a capture.
+        if (m_generatorDirty.exchange(false, std::memory_order_acq_rel)) {
+            if (!m_generator.flush())
+                JLOGC(JScopeLog::kHantek, JLogLevel::Warn)
+                    << "generator: " << m_generator.lastError();
+        }
+
         bool needsReconfigure = false;
         {
             std::lock_guard<std::mutex> lk(m_cfgMutex);
