@@ -9,6 +9,7 @@
 #include "sources/JReplayDriver.h"
 #include "scope/JScopeDriverRegistry.h"
 #include "scope/JScopeLog.h"
+#include "scope/JScopeSweepLabel.h"
 #include "ui/JScopeTheme.h"
 
 #include <cstdlib>
@@ -368,7 +369,14 @@ void JScopeApp::_wireSession() {
         JLOGC(JScopeLog::kUi, JLogLevel::Debug) << "state -> " << m_statusState;
         // Armed/Triggered is what a user watches while probing, so the trigger
         // panel follows the state as well as the status bar.
-        if (JScopeDriver* d = m_session.driver()) m_docks->trigger().syncFrom(*d);
+        if (JScopeDriver* d = m_session.driver()) {
+            m_docks->trigger().syncFrom(*d);
+            // And so does the legend on the trace. Without this, stopping left
+            // "Auto" written across the graticule for as long as the window
+            // stayed open: the state changed, the status bar followed it, and the
+            // one readout sitting on top of the waveform did not.
+            _syncViewFromDriver();
+        }
         m_window->requestRedraw();
     });
 }
@@ -704,8 +712,9 @@ void JScopeApp::_syncViewFromDriver() {
     // it is triggered, armed or stopped; that is its answer, not something to
     // infer from the sweep mode we asked it for. A device with no front panel
     // reports nothing and the sweep mode is then all there is to show.
-    std::string state = d->triggerStatusText();
-    if (state.empty()) state = jScopeTriggerModeName(tr.mode);
+    // The run state leads and the sweep mode only describes what happens while
+    // sweeping — see jScopeSweepLabel, where the rule lives and is tested.
+    std::string state = jScopeSweepLabel(d->state(), d->triggerStatusText(), tr.mode);
     const std::string acquire = d->acquisitionText();
     if (!acquire.empty() && acquire != "NORMal") state += "  " + acquire;
 
