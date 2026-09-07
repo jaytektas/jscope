@@ -22,7 +22,8 @@ inline namespace jf {
 // Pure, and headless, so the rule can be tested without a window.
 inline std::string jScopeSweepLabel(JScopeState state,
                                     const std::string& instrumentStatus,
-                                    JScopeTriggerMode mode) {
+                                    JScopeTriggerMode mode,
+                                    bool singleShotPending = false) {
     switch (state) {
         case JScopeState::Stopped: return "Stopped";
         case JScopeState::Idle:    return "Idle";
@@ -31,6 +32,11 @@ inline std::string jScopeSweepLabel(JScopeState state,
         case JScopeState::Armed:
         case JScopeState::Triggered:
         case JScopeState::Running:
+            // A requested single shot IS the sweep in progress, whatever mode the
+            // trigger is left in. Pressing Single with the mode on Auto used to
+            // announce "Auto" for the one frame it took, which describes the
+            // policy rather than what the instrument is doing.
+            if (singleShotPending) return jScopeTriggerModeName(JScopeTriggerMode::Single);
             return instrumentStatus.empty() ? jScopeTriggerModeName(mode) : instrumentStatus;
     }
     return {};

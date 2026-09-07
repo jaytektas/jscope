@@ -48,6 +48,35 @@ void testInstrumentWordWins(JTestReport& r) {
             "a stale instrument status cannot override a stopped scope");
 }
 
+// Pressing Single takes one shot whatever the trigger mode is left on, so that is
+// what the screen has to say while it happens. It used to announce the mode --
+// "Auto" for the single frame it took -- which describes the policy that would
+// have applied rather than what the instrument is doing.
+void testSingleShotOverridesTheMode(JTestReport& r) {
+    r.check(jScopeSweepLabel(JScopeState::Armed, "", JScopeTriggerMode::Auto,
+                             /*singleShotPending=*/true) ==
+                jScopeTriggerModeName(JScopeTriggerMode::Single),
+            "a single shot armed on Auto reads Single, not Auto");
+    r.check(jScopeSweepLabel(JScopeState::Triggered, "", JScopeTriggerMode::Normal, true) ==
+                jScopeTriggerModeName(JScopeTriggerMode::Single),
+            "and the same once it has triggered");
+
+    // It beats even the instrument's own word, because a bench scope reporting
+    // "TRIG'D" is not saying whether this sweep was the last one.
+    r.check(jScopeSweepLabel(JScopeState::Triggered, "TRIG'D", JScopeTriggerMode::Auto, true) ==
+                jScopeTriggerModeName(JScopeTriggerMode::Single),
+            "a requested single shot outranks the instrument's status word");
+
+    // And it says nothing once the shot is over: the run state leads.
+    r.check(jScopeSweepLabel(JScopeState::Stopped, "", JScopeTriggerMode::Auto, true) == "Stopped",
+            "when the shot has finished the scope reads Stopped");
+
+    // Without the flag nothing changes.
+    r.check(jScopeSweepLabel(JScopeState::Running, "", JScopeTriggerMode::Auto, false) ==
+                jScopeTriggerModeName(JScopeTriggerMode::Auto),
+            "a free-running sweep still names its mode");
+}
+
 } // namespace
 
 int main() {
@@ -55,5 +84,6 @@ int main() {
     testStoppedIsNotASweepMode(r);
     testSweepingShowsTheMode(r);
     testInstrumentWordWins(r);
+    testSingleShotOverridesTheMode(r);
     return r.result();
 }

@@ -79,6 +79,12 @@ public:
     virtual bool start(JScopeAcquisitionMode mode) = 0;
     virtual bool single() = 0;
     virtual void stop()   = 0;
+    // Whether the sweep now in progress was asked to be a SINGLE one. Not the
+    // same question as the trigger mode: pressing Single takes one shot whatever
+    // the mode says, and the display has to report what is actually happening
+    // rather than the policy that would otherwise apply.
+    virtual bool singleShotPending() const { return false; }
+
     virtual bool forceTrigger() = 0;   // false when !capabilities().hasForceTrigger
     virtual bool autoset()      = 0;   // false when !capabilities().hasAutoset
 

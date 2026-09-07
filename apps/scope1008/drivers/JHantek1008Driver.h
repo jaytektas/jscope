@@ -61,6 +61,7 @@ public:
 
     bool start(JScopeAcquisitionMode mode) override;
     bool single() override;
+    bool singleShotPending() const override { return m_singleShot.load(std::memory_order_acquire); }
     void stop() override;
     bool forceTrigger() override { return false; }   // the hardware has none
 

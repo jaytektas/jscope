@@ -793,7 +793,8 @@ void JScopeApp::_syncViewFromDriver() {
     // reports nothing and the sweep mode is then all there is to show.
     // The run state leads and the sweep mode only describes what happens while
     // sweeping — see jScopeSweepLabel, where the rule lives and is tested.
-    std::string state = jScopeSweepLabel(d->state(), d->triggerStatusText(), tr.mode);
+    std::string state = jScopeSweepLabel(d->state(), d->triggerStatusText(), tr.mode,
+                                        d->singleShotPending());
     const std::string acquire = d->acquisitionText();
     if (!acquire.empty() && acquire != "NORMal") state += "  " + acquire;
 
