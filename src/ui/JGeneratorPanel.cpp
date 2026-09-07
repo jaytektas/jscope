@@ -12,10 +12,10 @@ inline namespace jf {
 
 namespace {
 
-// 60-2 is the near-universal crank wheel, but 60 teeth is 120 steps and the
-// device takes 62, so the default is the same idea at the largest size that
-// fits: a wheel with a gap, which is what makes the signal recognisable.
-constexpr uint32_t kDefaultMissingTeeth = 2;
+// A plain alternating square wave, which is what the OEM starts from too: every
+// pulse the opposite of the last. It is a starting point to EDIT, not a
+// simulation of anything -- a crank gap is made by clicking the gap in.
+constexpr uint32_t kDefaultPulses = 40;
 
 std::string rpmText(uint32_t rpm) { return std::to_string(rpm) + " rpm"; }
 
@@ -31,8 +31,8 @@ JGeneratorPanel::JGeneratorPanel(JSceneGraph& graph, JScopeActions& actions)
 
 void JGeneratorPanel::rebuild(const JScopeCapabilities& caps) {
     m_caps = caps;
-    m_output = nullptr; m_rpm = nullptr; m_realRpm = nullptr;
-    m_teeth = nullptr; m_missing = nullptr;
+    m_output = nullptr; m_rpm = nullptr; m_realRpm = nullptr; m_maxRpm = nullptr;
+    m_pulses = nullptr;
     m_lines.clear();
     clear();
 
@@ -41,8 +41,9 @@ void JGeneratorPanel::rebuild(const JScopeCapabilities& caps) {
     const JScopeTheme& t = JScopeTheme::current();
     const JScopeGeneratorCapabilities& g = caps.generator;
 
-    // Whole teeth only: a half tooth is not a thing the wheel can have.
-    const uint32_t maxTeeth = std::max<uint32_t>(1, JCrankWheel::maxTeethIn(g.maxPatternLength));
+    // The device holds 1440 pulses; this driver writes the 62 that fit one packet,
+    // and publishing the larger number would offer a length that cannot be sent.
+    const uint32_t maxPulses = g.maxPatternLength;
 
     add(std::make_unique<JLabel>(m_graph, "Output", t.panelLabelWidth, t.panelRowHeight));
     m_output = add(std::make_unique<JCheckBox>(m_graph, "Running",
@@ -64,29 +65,25 @@ void JGeneratorPanel::rebuild(const JScopeCapabilities& caps) {
 
     // Not an echo of the box above it: the device counts whole clock ticks per
     // step, so what it will actually run is a rounded version of what was asked
-    // for, and it moves again whenever the tooth count changes.
+    // for, and the ceiling moves whenever the pulse count changes.
     add(std::make_unique<JLabel>(m_graph, "Real Speed", t.panelLabelWidth, t.panelRowHeight));
-    m_realRpm = add(std::make_unique<JLabel>(m_graph, "—", t.panelFieldWidth, t.panelRowHeight));
+    m_realRpm = add(std::make_unique<JLabel>(m_graph, "\xE2\x80\x94", t.panelFieldWidth, t.panelRowHeight));
+    // The ceiling moves with the pulse count and is worth the space, so it gets
+    // its own row: appended to Real Speed it was truncated away by the field width.
+    add(std::make_unique<JLabel>(m_graph, "Max Speed", t.panelLabelWidth, t.panelRowHeight));
+    m_maxRpm = add(std::make_unique<JLabel>(m_graph, "-", t.panelFieldWidth, t.panelRowHeight));
 
-    add(std::make_unique<JLabel>(m_graph, "Teeth", t.panelLabelWidth, t.panelRowHeight));
-    m_teeth = add(std::make_unique<JSpinBox>(m_graph, 1, static_cast<int>(maxTeeth),
-                                             t.panelFieldWidth, t.panelRowHeight));
-    m_teeth->onValueChanged.connect([this](int) {
+    add(std::make_unique<JLabel>(m_graph, "Pulses", t.panelLabelWidth, t.panelRowHeight));
+    m_pulses = add(std::make_unique<JSpinBox>(m_graph, 1, static_cast<int>(maxPulses),
+                                              t.panelFieldWidth, t.panelRowHeight));
+    m_pulses->onValueChanged.connect([this](int) {
         if (m_syncing) return;
         _pushPattern();
     });
 
-    add(std::make_unique<JLabel>(m_graph, "Missing", t.panelLabelWidth, t.panelRowHeight));
-    m_missing = add(std::make_unique<JSpinBox>(m_graph, 0, static_cast<int>(maxTeeth) - 1,
-                                               t.panelFieldWidth, t.panelRowHeight));
-    m_missing->onValueChanged.connect([this](int) {
-        if (m_syncing) return;
-        _pushPattern();
-    });
-
-    // One switch per output line. They all carry the same wheel: eight
-    // independently phased wheels would be a different instrument, and this one
-    // has a single step clock.
+    // Which lines a NEWLY GENERATED pattern is written to. Once it exists, each
+    // channel is edited in the grid independently -- these only decide what the
+    // starting pattern covers.
     for (uint32_t i = 0; i < g.patternOutputs; ++i) {
         const std::string label = "CH" + std::to_string(i + 1);
         if (i == 0) add(std::make_unique<JLabel>(m_graph, "Outputs",
@@ -101,34 +98,37 @@ void JGeneratorPanel::rebuild(const JScopeCapabilities& caps) {
         m_lines.push_back(box);
     }
 
-    // A wheel that drives nothing would be invisible on every probe, so the first
-    // line starts on.
+    // A pattern that drives nothing would be invisible on every probe, so the
+    // first line starts on.
     m_syncing = true;
     if (!m_lines.empty()) m_lines.front()->setChecked(true);
-    m_teeth->setValue(static_cast<int>(maxTeeth));
-    m_missing->setValue(static_cast<int>(std::min(kDefaultMissingTeeth, maxTeeth - 1)));
+    m_pulses->setValue(static_cast<int>(std::min(kDefaultPulses, maxPulses)));
     m_syncing = false;
 
-    // AND SEND IT. Those setValue calls happen with m_syncing raised, which is what
-    // stops a programmatic update from being mistaken for the user turning a
-    // control -- but it also means the wheel just put in front of the user was
-    // never given to the generator, which went on holding its own default. The
-    // panel then showed 31 teeth while the device played eight steps, and the
-    // Generator Output view drew the device's version, which is how it was caught.
+    // AND SEND IT. Those setValue calls happen with m_syncing raised, which stops a
+    // programmatic update being mistaken for the user turning a control -- and
+    // also means the settings just put in front of the user were never given to
+    // the generator, which would go on holding its own default. The panel showed
+    // one pattern while the device played another, and nothing on screen could
+    // have revealed it.
     _pushPattern();
 }
 
 void JGeneratorPanel::_pushPattern() {
-    if (!m_teeth || !m_missing) return;
+    if (!m_pulses || !m_rpm) return;
 
     uint8_t mask = 0;
     for (size_t i = 0; i < m_lines.size(); ++i)
         if (m_lines[i]->isChecked()) mask |= static_cast<uint8_t>(1u << i);
 
-    const JCrankWheel wheel{ static_cast<uint32_t>(m_teeth->value()),
-                             static_cast<uint32_t>(m_missing->value()), mask };
-    const auto pattern = wheel.pattern();
-    if (pattern.empty()) return;
+    // A fresh alternating pattern at the requested length. Regenerating rather
+    // than resampling is deliberate: changing the pulse count changes what a
+    // column MEANS, so carrying old edits across would move every event to an
+    // angle nobody chose.
+    const uint32_t count = static_cast<uint32_t>(m_pulses->value());
+    std::vector<uint8_t> pattern(count, 0);
+    for (uint32_t i = 0; i < count; ++i)
+        if ((i % 2) == 0) pattern[i] = mask;
 
     m_actions.setGeneratorPattern(pattern);
     // The step count just changed, so both the achievable speed AND the CEILING
@@ -149,10 +149,8 @@ void JGeneratorPanel::_showSpeeds() {
     if (!m_realRpm) return;
     const JPatternGenerator* g = m_actions.patternGenerator();
     if (!g) { m_realRpm->setText("—"); return; }
-    // The ceiling is worth showing beside the achieved speed: it moves with the
-    // wheel, and without it a speed box that silently refuses looks broken.
-    m_realRpm->setText(rpmText(g->actualRpm()) + "  (max " +
-                       std::to_string(g->maxRpm()) + ")");
+    m_realRpm->setText(rpmText(g->actualRpm()));
+    if (m_maxRpm) m_maxRpm->setText(rpmText(g->maxRpm()));
 }
 
 void JGeneratorPanel::syncFrom(const JScopeDriver& driver) {

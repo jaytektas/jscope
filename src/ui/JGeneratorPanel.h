@@ -1,7 +1,6 @@
 #pragma once
 
 #include "JScopeTheme.h"
-#include "scope/JCrankWheel.h"
 #include "scope/JScopeCapabilities.h"
 
 #include <j/core/JCheckBox.h>
@@ -54,8 +53,8 @@ private:
     JCheckBox* m_output{nullptr};
     JSpinBox*  m_rpm{nullptr};
     JLabel*    m_realRpm{nullptr};
-    JSpinBox*  m_teeth{nullptr};
-    JSpinBox*  m_missing{nullptr};
+    JLabel*    m_maxRpm{nullptr};
+    JSpinBox*  m_pulses{nullptr};
     std::vector<JCheckBox*> m_lines;   // one per digital output
 
     bool m_syncing{false};
