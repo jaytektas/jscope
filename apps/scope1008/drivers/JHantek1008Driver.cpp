@@ -956,10 +956,27 @@ void JHantek1008Driver::_runLoop() {
             _setState(JScopeState::Error);
             break;
         }
-        if (m_singleShot.load() && m_sequence > 0) break;
+        // ONE FRAME AND STOP, whether that was asked for by the Single button or by
+        // the sweep mode. Only the button used to end the sweep, so choosing Single
+        // in the trigger panel put the word on the screen and changed nothing --
+        // the scope announced a single shot and then free-ran.
+        //
+        // Read under the lock like every other setting the loop consults, because
+        // the panel can change it while this is mid-capture.
+        bool sweepIsSingle = false;
+        {
+            std::lock_guard<std::mutex> lk(m_cfgMutex);
+            sweepIsSingle = (m_trigger.mode == JScopeTriggerMode::Single);
+        }
+        if ((m_singleShot.load() || sweepIsSingle) && m_sequence > 0) break;
     }
 
     m_running.store(false);
+    // A loop that retires itself -- a completed single shot -- has to say so. Only
+    // stop() used to set the state, so after a single the instrument still read as
+    // Armed: waiting for a trigger it was no longer waiting for. An error has
+    // already set its own state and must not be overwritten with Stopped.
+    if (m_open && state() != JScopeState::Error) _setState(JScopeState::Stopped);
     JLOGC(JScopeLog::kHantek, JLogLevel::Debug) << "acquisition thread down";
 }
 
