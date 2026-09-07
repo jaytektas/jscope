@@ -268,13 +268,20 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
         dockItems().push_back({ item, t });
     }
 
-    window.menuBar().addMenu(file);
-    window.menuBar().addMenu(acquire);
-    window.menuBar().addMenu(device);
-    window.menuBar().addMenu(instrument);
-    window.menuBar().addMenu(view);
+    // Listed once and added in a loop, so the count below is the list rather than a
+    // number somebody has to remember to update. It said "3 menus" while adding
+    // five, having been written when there were three -- the same drift that left
+    // the dock layout line describing a layout the app no longer builds.
+    const std::vector<JMenu*> bar = { file, acquire, device, instrument, view };
+    for (JMenu* m : bar) window.menuBar().addMenu(m);
 
-    JLOGC(JScopeLog::kUi, JLogLevel::Debug) << "menu bar built (3 menus)";
+    // COUNTED, not stated. This line claimed three menus while five were being
+    // added, having been written when there were three and never revisited -- the
+    // same way the dock layout line went on describing a layout that had changed.
+    // A number the code derives cannot drift from what the code does.
+    JLOGC(JScopeLog::kUi, JLogLevel::Debug)
+        << "menu bar built: " << bar.size() << " menus, "
+        << dockItems().size() << " dock toggles under View";
 }
 
 
