@@ -42,16 +42,31 @@ public:
     // Emitted when a cell is flipped, with the whole edited pattern.
     JSignal<std::vector<uint8_t>> onPatternEdited;
 
+    // THE TWO ANGLE CURSORS, in degrees across the cycle. They measure the pattern
+    // rather than change it: a cam event is specified as "so many degrees after
+    // the crank reference", and the only way to place one is to be able to read
+    // the angle off the grid.
+    double cursorDegrees(int which) const;   // 0 = L1, 1 = L2
+
     void populateRenderPrimitives(JPrimitiveBuffer& buf) override;
     void handleMousePress(float mx, float my) override;
     void handleMouseMove(float mx, float my) override;
+    void handleMouseRelease(float mx, float my) override;
 
 private:
     JRect _gridRect() const;
     int   _columnAt(float mx) const;   // -1 outside
     int   _laneAt(float my) const;     // -1 outside
 
+    float _xForDegrees(double degrees) const;
+    double _degreesForX(float mx) const;
+    int   _cursorHandleAt(float mx, float my) const;   // -1 when not on a handle
+
     std::vector<uint8_t> m_pattern;
+    // Started where the OEM starts them, which is far enough apart to be
+    // obviously two cursors rather than one.
+    double               m_cursorDegrees[2]{ 144.0, 576.0 };
+    int                  m_dragCursor{-1};
     uint8_t              m_channels{8};
     int                  m_hoverColumn{-1};
     int                  m_hoverLane{-1};

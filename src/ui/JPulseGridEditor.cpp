@@ -6,6 +6,7 @@
 #include <j/graphics/VectorGraphics.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <string>
 
 inline namespace jf {
@@ -17,6 +18,15 @@ namespace {
 // row height so they track the font rather than being pixel counts of their own.
 float gutterWidth(const JScopeTheme& t) { return t.panelRowHeight * 1.4f; }
 float axisHeight (const JScopeTheme& t) { return t.panelRowHeight; }
+
+// The strip above the grid that carries the cursor handles. Pressing there grabs
+// a cursor; pressing inside the grid flips a cell. Separating them is what the
+// OEM does too -- its handles sit outside the graticule -- and without it every
+// attempt to move a cursor would edit the pattern underneath it.
+float cursorRailHeight(const JScopeTheme& t) { return t.panelRowHeight * 0.7f; }
+
+// How near the handle a press has to land, in pixels.
+constexpr float kCursorGrabPx = 10.0f;
 
 // A lane's waveform does not fill its lane: a gap top and bottom keeps adjacent
 // channels visibly separate, which is the whole reason for stacking them.
@@ -35,9 +45,42 @@ JRect JPulseGridEditor::_gridRect() const {
     const JScopeTheme& t = JScopeTheme::current();
     const JRect b = bounds();
     const float g = gutterWidth(t), a = axisHeight(t);
-    return JRect{ b.x + g, b.y + t.panelGap,
+    const float rail = cursorRailHeight(t);
+    return JRect{ b.x + g, b.y + t.panelGap + rail,
                   std::max(1.0f, b.width - g - t.panelGap),
-                  std::max(1.0f, b.height - a - t.panelGap * 2.0f) };
+                  std::max(1.0f, b.height - a - rail - t.panelGap * 2.0f) };
+}
+
+double JPulseGridEditor::cursorDegrees(int which) const {
+    return m_cursorDegrees[(which == 1) ? 1 : 0];
+}
+
+float JPulseGridEditor::_xForDegrees(double degrees) const {
+    const JRect g = _gridRect();
+    return g.x + g.width * static_cast<float>(degrees / kCycleDegrees);
+}
+
+double JPulseGridEditor::_degreesForX(float mx) const {
+    const JRect g = _gridRect();
+    if (g.width <= 0.0f) return 0.0;
+    const double d = kCycleDegrees * double(mx - g.x) / double(g.width);
+    return std::clamp(d, 0.0, kCycleDegrees);
+}
+
+int JPulseGridEditor::_cursorHandleAt(float mx, float my) const {
+    const JScopeTheme& t = JScopeTheme::current();
+    const JRect g = _gridRect();
+    // Only in the rail above the grid, so a press on the pattern is never a
+    // cursor grab.
+    if (my < g.y - cursorRailHeight(t) || my >= g.y) return -1;
+
+    int best = -1;
+    float bestDistance = kCursorGrabPx;
+    for (int i = 0; i < 2; ++i) {
+        const float d = std::abs(mx - _xForDegrees(m_cursorDegrees[i]));
+        if (d <= bestDistance) { bestDistance = d; best = i; }
+    }
+    return best;
 }
 
 int JPulseGridEditor::_columnAt(float mx) const {
@@ -56,11 +99,25 @@ int JPulseGridEditor::_laneAt(float my) const {
 }
 
 void JPulseGridEditor::handleMouseMove(float mx, float my) {
+    if (m_dragCursor >= 0) {
+        m_cursorDegrees[m_dragCursor] = _degreesForX(mx);
+        return;                       // a drag is not a hover
+    }
     m_hoverColumn = _columnAt(mx);
     m_hoverLane   = _laneAt(my);
 }
 
+void JPulseGridEditor::handleMouseRelease(float, float) { m_dragCursor = -1; }
+
 void JPulseGridEditor::handleMousePress(float mx, float my) {
+    // A cursor handle first: the rail is outside the grid, so this can never
+    // swallow a press meant for a cell.
+    if (const int cursor = _cursorHandleAt(mx, my); cursor >= 0) {
+        m_dragCursor = cursor;
+        m_cursorDegrees[cursor] = _degreesForX(mx);
+        return;
+    }
+
     const int col = _columnAt(mx), lane = _laneAt(my);
     if (col < 0 || lane < 0) return;
 
@@ -145,6 +202,19 @@ void JPulseGridEditor::populateRenderPrimitives(JPrimitiveBuffer& buf) {
                           g.y + laneH * float(m_hoverLane), columnW, laneH,
                           1.0f, JPaint::solid(t.readoutText));
 
+    // The two angle cursors, drawn over the pattern with a handle in the rail
+    // above it. L1 takes the trigger colour and L2 the neutral readout colour, so
+    // which is which is readable without consulting the numbers.
+    const float rail = cursorRailHeight(t);
+    for (int i = 0; i < 2; ++i) {
+        const float cx = _xForDegrees(m_cursorDegrees[i]);
+        const JColor colour = (i == 0) ? t.triggerMarker : t.readoutText;
+        line(cx, g.y - rail, cx, g.y + g.height, 1.0f, JPaint::solid(colour));
+        // A handle wide enough to hit: the line alone is one pixel.
+        canvas.fillRect(cx - kCursorGrabPx * 0.5f, g.y - rail,
+                        kCursorGrabPx, rail, JPaint::solid(colour));
+    }
+
     canvas.flush(buf);
 
     // TEXT AFTER FLUSH. JVectorCanvas::flush re-emits what it holds rather than
@@ -165,6 +235,17 @@ void JPulseGridEditor::populateRenderPrimitives(JPrimitiveBuffer& buf) {
     JTextHelper::pushTextAligned(buf, g.x + g.width * 0.75f, ay, g.width * 0.25f, axisHeight(t),
                                  "720\xC2\xB0", t.legendHeaderText.data(),
                                  JTextHelper::Align::Right, 0.0f);
+
+    // L1, L2 and the angle between them -- the measurement the cursors exist for,
+    // and the OEM's own readout. A cam event is specified as so many degrees from
+    // a crank reference, so the difference is the number actually wanted.
+    const double l1 = m_cursorDegrees[0], l2 = m_cursorDegrees[1];
+    char cursors[96];
+    std::snprintf(cursors, sizeof cursors,
+                  "L1 %.0f\xC2\xB0   L2 %.0f\xC2\xB0   \xCE\x94 %.0f\xC2\xB0",
+                  l1, l2, l2 - l1);
+    JTextHelper::pushTextAligned(buf, g.x, b.y, g.width, rail, cursors,
+                                 t.readoutText.data(), JTextHelper::Align::Center, 0.0f);
 
     // What the pointer is over, in the OEM's own terms: which channel, which
     // pulse, and where that pulse sits in the cycle.
