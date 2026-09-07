@@ -25,10 +25,25 @@ inline namespace jf {
 // because this is the commanded signal rather than an observed one.
 class JGeneratorSignal {
 public:
-    // Levels chosen so the trace sits inside the graticule at 1 V/div with the
-    // logic-low line on a division boundary rather than off the bottom.
     static constexpr float kLowVolts  = 0.0f;
     static constexpr float kHighVolts = 5.0f;   // the outputs are 5 V logic
+
+    // 5 V/div, so one output's full swing is exactly ONE DIVISION. With eight
+    // divisions on the graticule and eight outputs, the lanes then fill the screen
+    // exactly and none of them overlaps its neighbour -- which is how the OEM's
+    // generator window presents it, and the only way eight digital lines are
+    // readable at once.
+    static constexpr double kVoltsPerDiv = 5.0;
+
+    // Where channel `index`'s 0 V sits, in volts, so the channels stack top to
+    // bottom in the order they are numbered -- CH1 in the top lane, like the OEM.
+    //
+    // The band for lane i runs from the top edge downwards, and 0 V goes at the
+    // BOTTOM of its band so the trace rises into the lane rather than out of it.
+    static constexpr double lanePosition(uint8_t index, uint8_t verticalDivisions) {
+        const double halfSpan = (verticalDivisions / 2.0) * kVoltsPerDiv;
+        return halfSpan - kVoltsPerDiv * (index + 1);
+    }
 
     // `stepsPerScreen` samples are drawn per pattern step, so an edge lands on a
     // sample boundary and the squares stay square however few steps there are.

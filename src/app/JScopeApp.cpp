@@ -749,9 +749,22 @@ void JScopeApp::_refreshGeneratorTrace() {
     if (!m_generatorSignal.valid()) { m_generatorTrace->clearFrame(); return; }
 
     const JScopeFrame& f = m_generatorSignal.frame();
-    for (uint8_t c = 0; c < f.header.channelCount; ++c)
+
+    // Eight lanes, stacked, one per output — the OEM's generator window laid out
+    // the same way, and the only arrangement in which eight digital lines can be
+    // read at once. Overlaid on a common baseline they are one indistinguishable
+    // scribble.
+    // From the instrument's capabilities, not a driver's own table: src/app must
+    // not reach into one scope's driver, and the graticule is something every
+    // device describes for itself.
+    const JScopeCapabilities& caps = m_session.driver()->capabilities();
+    const uint8_t divisions = caps.verticalDivisions;
+    m_generatorTrace->setGraticule(caps.horizontalDivisions, divisions);
+    for (uint8_t c = 0; c < f.header.channelCount; ++c) {
         m_generatorTrace->setChannelView(c, true, f.header.voltsPerDiv[c], 0.0, false,
                                          JScopeCoupling::DC);
+        m_generatorTrace->setChannelPosition(c, JGeneratorSignal::lanePosition(c, divisions));
+    }
     m_generatorTrace->setFrame(f);
     m_generatorTrace->setTimeWindow(revolutionSeconds / kHorizontalDivisionsForGenerator);
     m_generatorTrace->setLegend("Commanded", revolutionSeconds / kHorizontalDivisionsForGenerator,

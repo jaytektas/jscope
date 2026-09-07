@@ -34,7 +34,7 @@ void JGeneratorSignal::build(const std::vector<uint8_t>& pattern, uint8_t output
         // that could disagree with the samples.
         h.countsToVolts[c]    = 1.0f;
         h.zeroOffsetCounts[c] = 0.0f;
-        h.voltsPerDiv[c]      = 2.0f;
+        h.voltsPerDiv[c]      = static_cast<float>(kVoltsPerDiv);
 
         int16_t* out = m_frame.plane(c);
         const uint8_t bit = static_cast<uint8_t>(1u << c);
