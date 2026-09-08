@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(jscope VERSION 0.1.0 LANGUAGES CXX)
+project(jscope VERSION 0.1.1 LANGUAGES CXX)
 
 # windres, for the Windows icon and version resource. Enabled only where it
 # exists -- a Linux build has no use for it and asking for it would fail.

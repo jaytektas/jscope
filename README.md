@@ -33,11 +33,11 @@ cross-compiles to Windows.
 
 ## Installing
 
-**Linux (Debian/Ubuntu)** — download `jscope_0.1.0_amd64.deb` from
+**Linux (Debian/Ubuntu)** — download `jscope_0.1.1_amd64.deb` from
 [Releases](https://github.com/jaytektas/jscope/releases):
 
 ```sh
-sudo apt install ./jscope_0.1.0_amd64.deb
+sudo apt install ./jscope_0.1.1_amd64.deb
 ```
 
 That is the whole setup. The package installs a udev rule granting the
@@ -47,7 +47,7 @@ replace and nothing to configure — plug it in and run `jscope`.
 Needs glibc 2.38 or newer, so Ubuntu 24.04 LTS and later, Debian 13 and later.
 On anything older, build from source.
 
-**Windows** — download `jscope-0.1.0-win64.zip` from the same place, unzip, run
+**Windows** — download `jscope-0.1.1-win64.zip` from the same place, unzip, run
 `jscope.exe`. Read `INSTALL.txt` first: WinUSB has to be bound to `0783:5725`
 with [Zadig](https://zadig.akeo.ie) before the scope can be opened, and that
 displaces Hantek's own driver until you put it back.
