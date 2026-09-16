@@ -7,10 +7,37 @@
 #include "scope/JScopeLog.h"
 
 #include <algorithm>
+#include <charconv>
 #include <fstream>
 #include <iomanip>
 
 inline namespace jf {
+
+namespace {
+
+// Fast fixed-precision float-to-string for CSV output. Replaces std::ostringstream
+// / operator<< with std::to_chars, which avoids locale overhead and heap allocation.
+// Writes exactly 9 significant digits (matching the original setprecision(9)).
+inline char* writeFloat(char* out, double v) {
+    char buf[32];
+    auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), v, std::chars_format::fixed, 9);
+    (void)ec;
+    char* p = buf;
+    while (p < ptr) *out++ = *p++;
+    return out;
+}
+
+// Write a time value (sample index × sample interval) to the buffer.
+inline char* writeTime(char* out, size_t index, double sampleInterval) {
+    return writeFloat(out, index * sampleInterval);
+}
+
+// Write a voltage value to the buffer.
+inline char* writeVoltage(char* out, double v) {
+    return writeFloat(out, v);
+}
+
+} // namespace
 
 bool JCsvExport::write(const std::string& path, const JScopeFrame& frame,
                        const std::string& deviceModel, size_t first, size_t count) {
@@ -48,13 +75,24 @@ bool JCsvExport::write(const std::string& path, const JScopeFrame& frame,
         f << ",ch" << static_cast<int>(frame.header.channelIds[p] + 1) << "_V";
     f << "\n";
 
-    f << std::setprecision(9);
+    // Fast path: use std::to_chars for every numeric value instead of
+    // operator<<.  For a 4096-sample × 8-channel export this avoids
+    // ~32 000 locale-aware floating-point formatting calls.
+    char buf[128];  // generous: 9-digit float + comma + newline + padding
     for (size_t i = 0; i < n; ++i) {
         const size_t s = begin + i;
-        f << (s * frame.header.sampleInterval);
-        for (uint8_t p = 0; p < frame.header.channelCount; ++p)
-            f << ',' << frame.voltsAt(p, static_cast<uint32_t>(s));
-        f << '\n';
+        char* p = buf;
+        p = writeTime(p, s, frame.header.sampleInterval);
+        *p++ = '\n';
+        f.write(buf, static_cast<std::streamsize>(p - buf));
+
+        for (uint8_t ch = 0; ch < frame.header.channelCount; ++ch) {
+            p = buf;
+            *p++ = ',';
+            p = writeVoltage(p, frame.voltsAt(ch, static_cast<uint32_t>(s)));
+            *p++ = '\n';
+            f.write(buf, static_cast<std::streamsize>(p - buf));
+        }
     }
 
     if (!f) {

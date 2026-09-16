@@ -168,8 +168,8 @@ JMeasurementEngine::measureAll(const JScopeFrame& frame, uint8_t plane, JWindow 
         std::vector<double> gaps;
         gaps.reserve(times.size() - 1);
         for (size_t i = 1; i < times.size(); ++i) gaps.push_back(times[i] - times[i - 1]);
-        std::sort(gaps.begin(), gaps.end());
         const size_t mid = gaps.size() / 2;
+        std::nth_element(gaps.begin(), gaps.begin() + mid, gaps.end());
         return (gaps.size() % 2) ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) * 0.5;
     };
 
@@ -209,8 +209,8 @@ JMeasurementEngine::measureAll(const JScopeFrame& frame, uint8_t plane, JWindow 
             if (high > 0.0 && high < period) highTimes.push_back(high);
         }
         if (!highTimes.empty()) {
-            std::sort(highTimes.begin(), highTimes.end());
             const size_t mid = highTimes.size() / 2;
+            std::nth_element(highTimes.begin(), highTimes.begin() + mid, highTimes.end());
             const double medianHigh = (highTimes.size() % 2)
                 ? highTimes[mid] : (highTimes[mid - 1] + highTimes[mid]) * 0.5;
             duty = medianHigh / period * 100.0;

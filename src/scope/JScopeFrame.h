@@ -5,7 +5,7 @@
 
 #include "JScopeFrameHeader.h"
 #include <cstddef>
-#include <algorithm>
+#include <cstring>
 #include <cstdint>
 #include <vector>
 
@@ -69,7 +69,7 @@ public:
     void copyHeaderAndSamplesFrom(const JScopeFrame& src) {
         header = src.header;
         for (uint8_t i = 0; i < src.header.channelCount; ++i)
-            std::copy(src.plane(i), src.plane(i) + src.header.sampleCount, plane(i));
+            std::memcpy(plane(i), src.plane(i), src.header.sampleCount * sizeof(int16_t));
     }
 
 private:

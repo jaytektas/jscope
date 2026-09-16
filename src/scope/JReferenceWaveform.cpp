@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <optional>
 
 inline namespace jf {
 
@@ -122,8 +123,14 @@ double crankWindowSeconds() {
 
 } // namespace
 
-JReferenceWaveform::JTrace JReferenceWaveform::generate(JReferenceSignal signal) {
-    JTrace t;
+// ---- caching layer (after the class is fully defined) -----------------------
+
+static std::array<std::optional<JReferenceWaveform::JTrace>,
+                  8> s_cache;
+
+// The actual generation logic — called once per signal type by cachedGenerate.
+static JReferenceWaveform::JTrace doGenerate(JReferenceSignal signal) {
+    JReferenceWaveform::JTrace t;
     if (signal == JReferenceSignal::None) return t;
 
     t.samples.reserve(kSamples);
@@ -264,6 +271,20 @@ JReferenceWaveform::JTrace JReferenceWaveform::generate(JReferenceSignal signal)
         }
     }
     return t;
+}
+
+static const JReferenceWaveform::JTrace& cachedGenerate(JReferenceSignal signal) {
+    auto& entry = s_cache[static_cast<size_t>(signal)];
+    if (!entry.has_value()) {
+        entry = doGenerate(signal);
+    }
+    return *entry;
+}
+
+// Public entry point — delegates to the cached version so the expensive
+// trig + dither loop runs only once per signal type.
+JReferenceWaveform::JTrace JReferenceWaveform::generate(JReferenceSignal signal) {
+    return cachedGenerate(signal);
 }
 
 } // inline namespace jf

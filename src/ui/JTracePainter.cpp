@@ -9,6 +9,12 @@
 #include <algorithm>
 #include <cmath>
 
+// Thread-local run buffer: eliminates heap allocation on every miter reversal
+// break. paintInterpolated is called from the UI thread, so this is safe, and
+// the buffer is reused across frames — the same one that JTraceDecimator's
+// scratch buffers are for for decimation.
+static thread_local JTraceDecimator::JPoints s_runBuffer;
+
 inline namespace jf {
 
 void JTracePainter::paint(JVectorCanvas& canvas, const JScopeFrame& frame, uint8_t plane,
@@ -64,26 +70,38 @@ void JTracePainter::paintInterpolated(JVectorCanvas& canvas,
     // there is no bisector to run away with. The visible difference at a genuine
     // reversal is a square end rather than a point, which is what a reversal
     // looks like anyway.
+    //
+    // Sqrt-free miter test: the original checks cos(angle) > -reversalCosine.
+    // cos(angle) = (a·b) / (|a||b|).  When a·b > 0 the angle is < 90° and can
+    // never be a reversal — skip the full test.  When a·b <= 0, square both
+    // sides to eliminate sqrt: (a·b)² > reversalCosine² · |a|² · |b|².
     size_t runStart = 0;
-    JTraceDecimator::JPoints run;
+    s_runBuffer.clear();
 
     const auto flush = [&](size_t endExclusive) {
         if (endExclusive - runStart < 2) return;
-        run.assign(pts.begin() + static_cast<long>(runStart),
-                   pts.begin() + static_cast<long>(endExclusive));
-        canvas.strokePolyline(run, width, JPaint::solid(color), /*closed=*/false,
+        s_runBuffer.insert(s_runBuffer.end(),
+                           pts.begin() + static_cast<long>(runStart),
+                           pts.begin() + static_cast<long>(endExclusive));
+        canvas.strokePolyline(s_runBuffer, width, JPaint::solid(color), /*closed=*/false,
                               JLineCap::Butt);
     };
+
+    const float revCos = theme.traceMiterReversalCosine;
+    const float revCos2 = revCos * revCos;
 
     for (size_t i = 1; i + 1 < pts.size(); ++i) {
         const float ax = pts[i].x - pts[i - 1].x, ay = pts[i].y - pts[i - 1].y;
         const float bx = pts[i + 1].x - pts[i].x, by = pts[i + 1].y - pts[i].y;
-        const float la = std::sqrt(ax * ax + ay * ay);
-        const float lb = std::sqrt(bx * bx + by * by);
-        if (la <= 0.0f || lb <= 0.0f) continue;
-        // cos of the turn: -1 is a full reversal, +1 is straight on.
-        const float dot = (ax * bx + ay * by) / (la * lb);
-        if (dot > -theme.traceMiterReversalCosine) continue;
+        const float la2 = ax * ax + ay * ay;
+        const float lb2 = bx * bx + by * by;
+        if (la2 <= 0.0f || lb2 <= 0.0f) continue;
+
+        const float dot = ax * bx + ay * by;
+        if (dot > 0.0f) continue;                       // angle < 90°, never a reversal
+        // dot <= 0: check whether |dot| > revCos · |a| · |b|  (squared form)
+        if (dot * dot <= revCos2 * la2 * lb2) continue; // not sharp enough to break
+
         flush(i + 1);
         runStart = i;
     }

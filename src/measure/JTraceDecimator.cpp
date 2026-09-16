@@ -5,6 +5,28 @@
 #include <algorithm>
 #include <cmath>
 
+// Precomputed y-mapping constants for one viewport. Avoids recomputing the
+// affine transform (span, scale, baseY) for every sample in the decimation
+// loop — the same transform applies to all columns in one call.
+struct JYMap {
+    float baseY{0.0f};          // vp.y + 0.5 * vp.height
+    float scale{0.0f};          // -vp.height / span  (span = verticalDivisions * voltsPerDiv)
+    float offsetVolts{0.0f};    // vp.offsetVolts
+    bool  inverted{false};
+    bool  valid{true};
+};
+
+static JYMap makeYMap(const JTraceViewport& vp) {
+    JYMap m;
+    const double span = static_cast<double>(vp.verticalDivisions) * vp.voltsPerDiv;
+    if (span <= 0.0 || vp.height <= 0.0f) { m.valid = false; return m; }
+    m.baseY  = static_cast<float>(vp.y + 0.5 * vp.height);
+    m.scale  = static_cast<float>(-vp.height / span);
+    m.offsetVolts = static_cast<float>(vp.offsetVolts);
+    m.inverted = vp.inverted;
+    return m;
+}
+
 inline namespace jf {
 
 void JTraceDecimator::reserve(JPoints& out, float pixelWidth) {
@@ -32,9 +54,10 @@ double JTraceDecimator::yToVolts(float y, const JTraceViewport& vp) {
 }
 
 JTraceDecimator::JPath JTraceDecimator::decimate(const int16_t* samples, size_t sampleTotal,
-                                                 float countsToVolts, float zeroOffsetCounts,
-                                                 const JTraceViewport& vp, JPoints& out) {
+                                                float countsToVolts, float zeroOffsetCounts,
+                                                const JTraceViewport& vp, JPoints& out) {
     out.clear();
+    const JYMap ym = makeYMap(vp);
     if (!samples || sampleTotal == 0 || vp.width <= 0.0f || vp.sampleCount == 0)
         return JPath::Empty;
 
@@ -44,7 +67,15 @@ JTraceDecimator::JPath JTraceDecimator::decimate(const int16_t* samples, size_t 
 
     const size_t columns = static_cast<size_t>(std::max(1.0f, std::floor(vp.width)));
 
-    auto yOf = [&](int16_t c) {
+    // Fast path: precomputed affine transform — one multiply and add per count.
+    auto yOfPrecomputed = [&](int16_t c) -> float {
+        double v = (static_cast<double>(c) - zeroOffsetCounts) * countsToVolts
+                 + ym.offsetVolts;
+        if (ym.inverted) v = -v;
+        return ym.baseY + static_cast<float>(v * ym.scale);
+    };
+    // Fallback path: full voltsToY, used when the viewport is degenerate.
+    auto yOfFallback = [&](int16_t c) -> float {
         return voltsToY((static_cast<double>(c) - zeroOffsetCounts) * countsToVolts, vp);
     };
 
@@ -53,7 +84,9 @@ JTraceDecimator::JPath JTraceDecimator::decimate(const int16_t* samples, size_t 
         // decimation artefacts where none are needed.
         const double dx = (count > 1) ? (static_cast<double>(vp.width) / (count - 1)) : 0.0;
         for (size_t i = 0; i < count; ++i)
-            out.push_back({ static_cast<float>(vp.x + i * dx), yOf(samples[first + i]) });
+            out.push_back({ static_cast<float>(vp.x + i * dx),
+                            ym.valid ? yOfPrecomputed(samples[first + i])
+                                     : yOfFallback(samples[first + i]) });
         return JPath::Interpolated;
     }
 
@@ -89,8 +122,8 @@ JTraceDecimator::JPath JTraceDecimator::decimate(const int16_t* samples, size_t 
         // Screen y is inverted relative to counts: the maximum count is the
         // topmost point, so yTop comes from mx.
         const float px   = vp.x + static_cast<float>(c);
-        const float yTop = yOf(mx);
-        const float yBot = yOf(mn);
+        const float yTop = ym.valid ? yOfPrecomputed(mx) : yOfFallback(mx);
+        const float yBot = ym.valid ? yOfPrecomputed(mn) : yOfFallback(mn);
 
         const bool topFirst = !havePrev
                             || std::abs(yTop - prevY) <= std::abs(yBot - prevY);
