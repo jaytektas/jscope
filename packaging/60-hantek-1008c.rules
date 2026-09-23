@@ -1,0 +1,22 @@
+# Hantek 1008C -- 8-channel automotive oscilloscope.
+#
+# The device binds to no kernel driver, so an application can claim it through
+# libusb directly. All it needs is permission on the node, which defaults to
+# root-only.
+#
+# uaccess hands it to whoever is logged in at the seat, which is the modern
+# answer and is why this is not MODE="0666" -- there is no reason for every
+# account on the machine to have raw USB access to it. The plugdev group is
+# kept as a fallback for setups without systemd-logind.
+#
+# The number matters: uaccess is acted on by 73-seat-late.rules, so a tag added
+# by a file sorting after it (a 99- rule, say) is never seen and the logged-in
+# user gets nothing.
+#
+# The device reports itself as "YDJ-2088" by "C3PO" with no mention of Hantek,
+# so matching is by ID and never by name.
+#
+# One copy, installed by both packaging/build-deb.sh and
+# packaging/install-launcher.sh.
+SUBSYSTEM=="usb", ATTR{idVendor}=="0783", ATTR{idProduct}=="5725", \
+    MODE="0660", GROUP="plugdev", TAG+="uaccess"

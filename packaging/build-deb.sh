@@ -69,23 +69,8 @@ done
 sed 's|^Exec=.*|Exec=jscope|' "$ROOT/packaging/jscope.desktop" \
     > "$PKG/usr/share/applications/jscope.desktop"
 
-cat > "$PKG/usr/lib/udev/rules.d/60-hantek-1008c.rules" <<'EOF'
-# Hantek 1008C -- 8-channel automotive oscilloscope.
-#
-# The device binds to no kernel driver, so an application can claim it through
-# libusb directly. All it needs is permission on the node, which defaults to
-# root-only.
-#
-# uaccess hands it to whoever is logged in at the seat, which is the modern
-# answer and is why this is not MODE="0666" -- there is no reason for every
-# account on the machine to have raw USB access to it. The plugdev group is
-# kept as a fallback for setups without systemd-logind.
-#
-# The device reports itself as "YDJ-2088" by "C3PO" with no mention of Hantek,
-# so matching is by ID and never by name.
-SUBSYSTEM=="usb", ATTR{idVendor}=="0783", ATTR{idProduct}=="5725", \
-    MODE="0660", GROUP="plugdev", TAG+="uaccess"
-EOF
+install -m644 "$ROOT/packaging/60-hantek-1008c.rules" \
+            "$PKG/usr/lib/udev/rules.d/60-hantek-1008c.rules"
 
 INSTALLED_KB=$(du -sk "$PKG" | cut -f1)
 

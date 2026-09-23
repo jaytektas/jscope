@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Install the desktop entry and icon for the current user. No root: everything
-# goes under ~/.local/share, which is what XDG says a user-built application
-# should do.
+# Install the desktop entry and icon for the current user, under ~/.local/share
+# as XDG says a user-built application should -- and the udev rule, which is the
+# one step that needs root. Without it the launcher starts an application that
+# finds the scope and is then refused it: "libusb_open: Access denied".
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,9 +64,33 @@ command -v update-desktop-database >/dev/null && update-desktop-database "$apps"
 rm -f "$icons/icon-theme.cache"
 touch "$icons"
 
+# The udev rule. Checked first so an unchanged rule costs no sudo prompt, and
+# skipped when the .deb has already put the same file in /usr/lib.
+rule_src="$here/60-hantek-1008c.rules"
+rule_dst="/etc/udev/rules.d/60-hantek-1008c.rules"
+rule_note="  $rule_dst"
+if cmp -s "$rule_src" "/usr/lib/udev/rules.d/60-hantek-1008c.rules"; then
+    rule_note="  /usr/lib/udev/rules.d/60-hantek-1008c.rules (from the package)"
+elif ! cmp -s "$rule_src" "$rule_dst" || [ -e /etc/udev/rules.d/99-hantek-1008c.rules ]; then
+    echo "installing the udev rule for the scope -- sudo will ask for your password"
+    # 99-hantek-1008c.rules is what the README used to say to create by hand:
+    # MODE="0666" for every account, and numbered too late for uaccess.
+    if sudo install -m644 "$rule_src" "$rule_dst" \
+       && sudo rm -f /etc/udev/rules.d/99-hantek-1008c.rules \
+       && sudo udevadm control --reload-rules \
+       && sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0783; then
+        # The trigger only queues the event; settle so the permissions are in
+        # place before this script says it is done.
+        udevadm settle || true
+    else
+        rule_note="  NOT INSTALLED: $rule_dst -- jscope will be refused the scope until it is"
+    fi
+fi
+
 echo "installed:"
 echo "  $apps/jscope.desktop  ->  $here/jscope-launch.sh  ->  $bin"
 echo "  $icons/scalable/apps/jscope.svg"
+echo "$rule_note"
 
 # Prove the theme can find it rather than assuming: the failure above was silent
 # in both directions, which is why it went unnoticed until the launcher was used.

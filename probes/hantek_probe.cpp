@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
     const auto devices = JHantek1008Driver::enumerate();
     if (devices.empty()) {
         JLOGC(kCat, JLogLevel::Error)
-            << "no Hantek 1008C found — check the cable and udev/99-hantek-scopes.rules";
+            << "no Hantek 1008C found — check the cable and packaging/60-hantek-1008c.rules";
         return 1;
     }
 

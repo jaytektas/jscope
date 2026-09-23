@@ -88,12 +88,19 @@ is a single `.exe`. See [`docs/windows-cross-compile.md`](docs/windows-cross-com
 ## Access to the device
 
 The 1008C binds to no kernel driver, so libusb can claim it directly. It only
-needs permission:
+needs permission, which [`packaging/60-hantek-1008c.rules`](packaging/60-hantek-1008c.rules)
+grants to the logged-in user. The `.deb` installs it, and so does
+`packaging/install-launcher.sh` for a source build (it asks for sudo for that
+step alone). By hand:
 
+```sh
+sudo install -m644 packaging/60-hantek-1008c.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=usb --attr-match=idVendor=0783
 ```
-# /etc/udev/rules.d/99-hantek-1008c.rules
-SUBSYSTEM=="usb", ATTR{idVendor}=="0783", ATTR{idProduct}=="5725", MODE="0666"
-```
+
+Keep the `60-` prefix: the rule works through `uaccess`, which is acted on by
+`73-seat-late.rules`, so a copy numbered after that grants nothing.
 
 Note that the device does not identify itself as a Hantek — it enumerates as
 `"YDJ-2088"` by `"C3PO"`. Driver matching keys on VID/PID, never on strings.
