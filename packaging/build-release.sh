@@ -39,7 +39,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 cp "$DIST/jscope-$VERSION-x86_64.AppImage" "$DIST/jscope_${VERSION}_amd64.deb" \
    "$DIST/jscope-$VERSION-setup.exe" "$OUT/"
-( cd "$OUT" && sha256sum jscope-* > SHA256SUMS )
+( cd "$OUT" && sha256sum jscope[-_]* > SHA256SUMS )   # the .deb is jscope_<v>, the others jscope-<v>
 
 echo
 echo "release $VERSION: $OUT"
