@@ -335,6 +335,8 @@ void JScopeMenuBuilder::build(JAppWindow& window, JSceneGraph& graph, JScopeApp&
         JDialogManager::instance().push(std::move(req));
     });
 
+    help->add(graph, "Check for Updates")->onTriggered.connect([&app] { app.updater().check(true); });
+
     help->add(graph, "About jscope")->onTriggered.connect([] {
         JDialogRequest req;
         req.kind  = JDialogRequest::JKind::Message;

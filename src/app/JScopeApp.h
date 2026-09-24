@@ -12,12 +12,16 @@
 #include "ui/JPulseGridEditor.h"
 #include "ui/JTraceView.h"
 
+#include <j/app/JAppUpdater.h>
 #include <j/app/JAppWindow.h>
+#include <j/platform/JUdevRule.h>
 #include <j/core/GenesisComponents.h>
 
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 // The application: window, session, and the wiring between them.
@@ -49,12 +53,19 @@ public:
     // app is constructed; see defaultSettingsPath for why they must not share.
     static void setApplicationName(std::string name);
 
+    // The udev rule this application's instrument needs on Linux, and the USB ID it covers, so a copy
+    // with no install step (an AppImage) can put it in place itself when that device is refused. The
+    // shell knows no instrument; the application says which rule is its. Set before the app is built.
+    static void setUsbRule(JUdevRule rule, uint16_t vendorId, uint16_t productId);
+
     // Async-signal-safe: sets a flag the app polls on the main thread. Call this
     // from a signal handler; never touch the window from one.
     static void requestTerminate();
 
     static std::string s_preferredDriver;
     static std::string s_applicationName;
+    static std::optional<JUdevRule> s_usbRule;
+    static uint16_t s_usbRuleVendorId, s_usbRuleProductId;
 
     JScopeApp(const JScopeApp&)            = delete;
     JScopeApp& operator=(const JScopeApp&) = delete;
@@ -98,6 +109,7 @@ public:
     JCentreDockHost& centre()    { return *m_centre; }
     JScopeActions&    actions() { return m_actions; }
     JScopeDockLayout& docks()   { return *m_docks; }
+    JAppUpdater&      updater() { return *m_updater; }
 
     // ---- capture ----
     bool startRecording(const std::string& path);
@@ -121,6 +133,10 @@ private:
     void _wireMeasurements();
     void _wireFrameTiming();
     void _selectDevice();
+    // Offer to install the USB rule for `device`, then run `then` whatever the answer. False, and nothing
+    // asked, when the rule does not cover this device, is installed, or was already offered this session.
+    bool _offerUsbRule(const JScopeDeviceInfo& device, std::function<void()> then);
+    bool m_usbRuleOffered{false};
 
     // Set by beginDeviceSelection, cleared by the first frame that runs it.
     bool m_deviceSelectionPending{false};
@@ -145,6 +161,9 @@ private:
     JScopeSettings                    m_settings;
     JCaptureWriter                    m_writer;
     std::unique_ptr<JFrameTimer>      m_shutdownPoll;
+    // jscope's own updates, from its GitHub releases: checked at startup, on Help > Check for Updates,
+    // and installed as the window closes.
+    std::unique_ptr<JAppUpdater>      m_updater;
     static std::atomic<bool>          s_terminate;
 
     JScopeDeviceInfo m_currentDevice;

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Assemble a distributable Windows package from the cross-compiled jscope.exe.
+# Build the Windows installer from the cross-compiled jscope.exe: dist/jscope-<version>-setup.exe.
 #
 # The build script produces one self-contained executable; this produces the
 # thing you can actually hand to someone. The difference is not the binary --
@@ -7,17 +7,25 @@
 # licence requires be shipped alongside it:
 #
 #   jscope.exe            the application, GCC runtime linked in statically
-#   INSTALL.txt           the WinUSB step, which is the one thing that WILL
+#   README.txt            the WinUSB step, which is the one thing that WILL
 #                         stop a first-time user, and how to undo it
 #   LICENSE.txt           GPLv3, the licence of the work as a whole
 #   SOURCE.txt            where the corresponding source is, pinned to the exact
 #                         commit this binary was built from -- GPLv3 s6 is not
 #                         satisfied by "it's on GitHub somewhere"
-#   licences/libusb.txt   LGPL-2.1, because libusb is linked in statically and
-#                         s6(a) applies whether or not anyone ever asks
+#   licences/             libusb (LGPL-2.1, linked in statically, so s6(a)
+#                         applies whether or not anyone ever asks) and libwdi
+#                         (LGPL-3.0, the driver step)
+#   driver/wdi-simple.exe binds WinUSB to the scope (third_party/libwdi-win)
 #
-# Deliberately NOT an installer. There is nothing to install: no registry keys,
-# no DLLs to place, no uninstaller to get wrong. Unzip it and run it.
+# AN INSTALLER, because jscope updates itself: the update downloads the next
+# jscope-<version>-setup.exe and runs it silently over this copy (packaging/
+# jscope.iss says how that stays smooth). And because the one hard step for a
+# first-time user -- binding WinUSB -- is a checkbox in it rather than a page of
+# Zadig instructions.
+#
+# Needs Inno Setup's compiler: ISCC (wine is fine -- set ISCC to the command, e.g.
+# ISCC="wine C:/InnoSetup/ISCC.exe"; the default looks for exactly that).
 
 set -euo pipefail
 
@@ -27,7 +35,10 @@ DIST="$ROOT/dist"
 
 fail() { echo "package-windows: $*" >&2; exit 1; }
 
-command -v zip >/dev/null || fail "no zip (apt install zip)"
+ISCC="${ISCC:-wine C:/InnoSetup/ISCC.exe}"
+export WINEDEBUG="${WINEDEBUG:--all}"   # wine narrates its own start-up otherwise
+command -v ${ISCC%% *} >/dev/null || fail "no Inno Setup compiler: set ISCC (see the top of this file)"
+[ -f "$ROOT/third_party/libwdi-win/wdi-simple.exe" ] || fail "third_party/libwdi-win is missing"
 
 # Build first. Cheap when it is already current, and it removes the failure
 # mode where a package is cut from a stale exe that nobody thought to rebuild.
@@ -46,9 +57,8 @@ git -C "$ROOT" diff-index --quiet HEAD -- || COMMIT="$COMMIT (plus uncommitted c
 
 NAME="jscope-$VERSION-win64"
 STAGE="$DIST/$NAME"
-
-rm -rf "$STAGE" "$DIST/$NAME.zip"
-mkdir -p "$STAGE/licences"
+rm -rf "$STAGE" "$DIST/jscope-$VERSION-setup.exe"
+mkdir -p "$STAGE/licences" "$STAGE/driver"
 
 cp "$BUILD/jscope.exe" "$STAGE/"
 x86_64-w64-mingw32-strip "$STAGE/jscope.exe"
@@ -59,6 +69,8 @@ cp "$ROOT/LICENSE" "$STAGE/LICENSE.txt"
 # code does rather than from a copy that could drift away from it.
 tar xjf "$ROOT/third_party/libusb-win/libusb-1.0.29.tar.bz2" \
     -O libusb-1.0.29/COPYING > "$STAGE/licences/libusb-1.0.29-COPYING.txt"
+cp "$ROOT/third_party/libwdi-win/COPYING-LGPL.txt" "$STAGE/licences/libwdi-1.5.1-COPYING.txt"
+cp "$ROOT/third_party/libwdi-win/wdi-simple.exe" "$STAGE/driver/"
 
 cat > "$STAGE/SOURCE.txt" <<EOF
 jscope $VERSION -- corresponding source
@@ -85,62 +97,57 @@ It depends on the JFramework toolkit, which is also GPLv3 and also published:
 
 Everything needed to reproduce this exact package is in the repository --
 packaging/build-windows.sh cross-compiles it from Linux with mingw-w64, and
-packaging/package-windows.sh assembles the zip you are reading this from.
+packaging/package-windows.sh builds the installer this came from.
 
 libusb 1.0.29 is linked into jscope.exe statically and is licensed LGPL-2.1
 (see licences/). Its unmodified source tarball is in the repository under
 third_party/libusb-win/, and the build links against it through a documented,
 scripted step, so the program can be relinked against a different build of
 libusb by anyone who wants to.
+
+driver/wdi-simple.exe is libwdi 1.5.1 (LGPL-3.0, see licences/), built from the
+source tarball in third_party/libwdi-win/ by the steps in the README there.
 EOF
 
-cat > "$STAGE/INSTALL.txt" <<'EOF'
+cat > "$STAGE/README.txt" <<'EOF'
 jscope for Windows (x86-64)
 ===========================
 
-There is nothing to install. Unzip it somewhere and run jscope.exe.
+The executable is self-contained: the GCC runtime and libusb are linked in. It
+needs only what Windows and your graphics driver already provide -- kernel32,
+user32, gdi32, msvcrt, and vulkan-1.dll, which the Vulkan loader installs with
+the driver.
 
-The executable is self-contained: the GCC runtime and libusb are linked in, so
-no DLLs need to be copied beside it. It needs only what Windows and your
-graphics driver already provide -- kernel32, user32, gdi32, msvcrt, and
-vulkan-1.dll, which the Vulkan loader installs with the driver.
+jscope keeps itself up to date: it checks for a new release when it starts, and
+Help -> Check for Updates asks at any time. An update downloads, is checked
+against its published checksum, and installs over this copy.
 
 
-The one thing you MUST do first
--------------------------------
+The USB driver
+--------------
 
 The Hantek 1008C is a vendor-specific USB device. Windows has no class driver
 for it, and jscope talks to it through libusb, which on Windows can only open a
 device that has WinUSB bound to it. Out of the box the scope is bound to
 Hantek's own driver instead, and jscope will not see it at all.
 
-To fix that, once, with the scope plugged in:
+The installer's "Install the USB driver" task binds WinUSB to the scope (USB ID
+0783:5725) -- Windows asks for an administrator's permission for that one step.
+Unplug the scope and plug it back in afterwards. To run the step again later,
+use "Install the jscope USB driver" in the Start menu.
 
-  1. Download Zadig from https://zadig.akeo.ie -- it is a single executable and
-     needs no installation either.
-  2. Run it as Administrator.
-  3. Options -> List All Devices.
-  4. In the dropdown, select the device with USB ID  0783 5725.
-     It will probably be called "YDJ-2088" rather than anything with Hantek in
-     the name. That is normal -- the device identifies itself as a generic OEM
-     part, which is also why jscope matches it by USB ID and never by name.
+READ THIS BEFORE YOU DO IT: binding WinUSB means HANTEK'S OWN SOFTWARE WILL NO
+LONGER SEE THE SCOPE. Only one driver can be bound at a time. It is completely
+reversible -- Device Manager -> the device -> Update Driver -> pick the Hantek
+driver again, or just uninstall the device and replug it -- but if you rely on
+the OEM application, know that you are choosing between them rather than adding
+to what you have.
 
-     CHECK THE USB ID, NOT THE NAME, AND CHECK IT TWICE. "List All Devices"
-     shows every USB device on the machine, including your keyboard and mouse,
-     and Zadig will replace the driver on whichever one is selected. Doing that
-     to an input device leaves you with no way to undo it except another
-     keyboard. The ID field must read 0783 5725 before you click anything.
-  5. Choose WinUSB as the driver on the right, and click Replace Driver.
-  6. Unplug the scope and plug it back in.
-
-jscope will find it from then on.
-
-READ THIS BEFORE YOU DO IT: replacing the driver means HANTEK'S OWN SOFTWARE
-WILL NO LONGER SEE THE SCOPE. Only one driver can be bound at a time. It is
-completely reversible -- Device Manager -> the device -> Update Driver -> pick
-the Hantek driver again, or just uninstall the device and replug it -- but if
-you rely on the OEM application, know that you are choosing between them rather
-than adding to what you have.
+If the automatic step does not work, Zadig (https://zadig.akeo.ie) does the same
+thing by hand: run it as Administrator, Options -> List All Devices, select the
+device with USB ID 0783 5725 (it is probably called "YDJ-2088" -- CHECK THE USB
+ID, NOT THE NAME: Zadig replaces the driver on whatever is selected, keyboard
+included), choose WinUSB, and click Replace Driver.
 
 
 Graphics
@@ -156,7 +163,7 @@ Where your settings go
 ----------------------
 
 Window layout, channel setup and the instrument you used last are remembered
-per-user under your AppData folder. Deleting jscope.exe leaves them behind; they
+per-user under your AppData folder. Uninstalling jscope leaves them behind; they
 are harmless, and they are what makes the application come back the way you left
 it.
 
@@ -171,8 +178,13 @@ reading looks wrong. Keyboard shortcuts are listed there too.
 Source, licence and issues: https://github.com/jaytektas/jscope
 EOF
 
-( cd "$DIST" && zip -qr "$NAME.zip" "$NAME" )
+# ISCC is a Windows program: hand it Windows paths. winepath does that when it
+# runs under wine; a native ISCC (on Windows itself) takes them as they are.
+winpath() { if command -v winepath >/dev/null; then winepath -w "$1" 2>/dev/null; else echo "$1"; fi; }
+$ISCC /Q "/DAppVersion=$VERSION" "/DStageDir=$(winpath "$STAGE")" "/DOutputDir=$(winpath "$DIST")" \
+      "$(winpath "$ROOT/packaging/jscope.iss")" || fail "the installer did not build"
+[ -f "$DIST/jscope-$VERSION-setup.exe" ] || fail "no jscope-$VERSION-setup.exe after the build"
+rm -rf "$STAGE"
 
 echo
-echo "packaged: $DIST/$NAME.zip"
-( cd "$DIST" && unzip -l "$NAME.zip" | sed 's/^/  /' )
+echo "packaged: $DIST/jscope-$VERSION-setup.exe"

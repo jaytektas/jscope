@@ -14,6 +14,7 @@
 #include "scope/JScopeLog.h"
 #include "scope/JScopeSweepLabel.h"
 #include "ui/JScopeTheme.h"
+#include <j/core/Dialog.h>
 
 #include <cstdlib>
 #include <filesystem>
@@ -34,6 +35,9 @@ constexpr int         kConnectNoticeMs = 30000;
 // How often the main thread checks for a termination signal. Frame-paced, so it
 // costs nothing when the loop is already awake and does not spin when it is not.
 constexpr float       kShutdownPollMs  = 100.0f;
+// Where jscope's releases are published, and the variable that points it at a pretend one for testing.
+constexpr const char* kReleasesApi     = "https://api.github.com/repos/jaytektas/jscope/releases/latest";
+constexpr const char* kUpdateUrlEnv    = "JSCOPE_UPDATE_URL";
 }
 
 std::atomic<bool> JScopeApp::s_terminate{false};
@@ -67,6 +71,15 @@ void JScopeApp::setApplicationName(std::string name) {
 }
 
 std::string JScopeApp::s_preferredDriver;
+std::optional<JUdevRule> JScopeApp::s_usbRule;
+uint16_t JScopeApp::s_usbRuleVendorId  = 0;
+uint16_t JScopeApp::s_usbRuleProductId = 0;
+
+void JScopeApp::setUsbRule(JUdevRule rule, uint16_t vendorId, uint16_t productId) {
+    s_usbRule = std::move(rule);
+    s_usbRuleVendorId  = vendorId;
+    s_usbRuleProductId = productId;
+}
 
 void JScopeApp::preferDriver(std::string driverId) {
     s_preferredDriver = std::move(driverId);
@@ -87,6 +100,9 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
     }
 
     JScopeTheme::reseedFromStyle();
+
+    m_updater = std::make_unique<JAppUpdater>(
+        *m_window, JAppUpdater::JConfig{ "jscope", JSCOPE_VERSION, kReleasesApi, kUpdateUrlEnv });
 
     m_traceView = std::make_unique<JTraceView>(m_app.sceneGraph());
 
@@ -189,7 +205,11 @@ bool JScopeApp::valid() const { return m_window && m_window->valid(); }
 int JScopeApp::run() {
     if (!valid()) return -1;
     JLOGC(JScopeLog::kUi, JLogLevel::Info) << "entering the run loop";
-    return m_window->run();
+    // Only a newer version is reported from here; no network at a workbench is not news.
+    m_updater->check(false);
+    const int rc = m_window->run();
+    m_updater->installStaged();
+    return rc;
 }
 
 // Render cost, reported once a second rather than once a frame. A scope draws
@@ -464,6 +484,11 @@ void JScopeApp::beginDeviceSelection() {
 void JScopeApp::_selectDevice() {
     const auto devices = availableDevices();
 
+    // A real instrument on the bus and no rule letting this account open it: every open below would be
+    // refused with "Access denied". Ask first, then select with whatever the answer was.
+    for (const JScopeDeviceInfo& d : devices)
+        if (_offerUsbRule(d, [this] { _selectDevice(); })) return;
+
     // An explicit --device wins outright.
     if (!s_preferredDriver.empty()) {
         for (const JScopeDeviceInfo& d : devices)
@@ -527,6 +552,7 @@ void JScopeApp::_connectTo(const JScopeDeviceInfo& device) {
     m_window->showStatus("Connecting to " + device.displayName + "...", kConnectNoticeMs);
     m_session.openAsync(device, [this, device](bool ok) {
         if (!ok) {
+            if (_offerUsbRule(device, [this, device] { _connectTo(device); })) return;
             m_window->setNotice("Cannot open " + device.displayName,
                                 "Pick another from the Device menu, or use Device > Scan"
                                 " for Devices.");
@@ -534,6 +560,26 @@ void JScopeApp::_connectTo(const JScopeDeviceInfo& device) {
         }
         _adoptOpenSession(device);
     });
+}
+
+bool JScopeApp::_offerUsbRule(const JScopeDeviceInfo& device, std::function<void()> then) {
+    if (m_usbRuleOffered || !s_usbRule || device.simulated) return false;
+    if (device.vendorId != s_usbRuleVendorId || device.productId != s_usbRuleProductId) return false;
+    if (s_usbRule->installed()) return false;
+    m_usbRuleOffered = true;
+    JDialogOptions yesNo; yesNo.okLabel = "Yes"; yesNo.cancelLabel = "No";
+    JDialog::confirm("USB permission needed",
+        "jscope needs permission to open the scope over USB. This is set up once, and the system will"
+        " ask for your password.\n\nSet it up now?",
+        [this, then] {
+            s_usbRule->install([this, then](bool ok, const std::string& error) {
+                if (!ok) JDialog::message("USB permission not set up",
+                                          "The USB rule was not installed (" + error + ").");
+                then();
+            });
+        },
+        then, yesNo);
+    return true;
 }
 
 bool JScopeApp::openBestAvailableDevice() {
@@ -635,6 +681,7 @@ bool JScopeApp::openDevice(const JScopeDeviceInfo& device) {
         // instrument, contradicting the status bar beside it.
         m_window->showStatus("", 1);
         if (!ok) {
+            if (_offerUsbRule(device, [this, device] { openDevice(device); })) return;
             m_window->setNotice("Cannot connect", device.displayName + " did not answer");
             return;
         }

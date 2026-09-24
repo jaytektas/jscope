@@ -33,24 +33,25 @@ cross-compiles to Windows.
 
 ## Installing
 
-**Linux (Debian/Ubuntu)** — download `jscope_0.1.3_amd64.deb` from
-[Releases](https://github.com/jaytektas/jscope/releases):
+**Linux** — download `jscope-<version>-x86_64.AppImage` from
+[Releases](https://github.com/jaytektas/jscope/releases), make it executable and
+run it. It keeps itself up to date: it checks for a new release when it starts,
+and Help → Check for Updates asks at any time. The first time the scope is
+refused, jscope offers to install the udev rule that grants the logged-in user
+access to it — the system asks for your password, once.
 
-```sh
-sudo apt install ./jscope_0.1.3_amd64.deb
-```
+Prefer a package manager? `jscope_<version>_amd64.deb` is in the same release
+(`sudo apt install ./jscope_<version>_amd64.deb`); it installs the udev rule
+itself, but it does not update itself.
 
-That is the whole setup. The package installs a udev rule granting the
-logged-in user access to the scope, so unlike Windows there is no driver to
-replace and nothing to configure — plug it in and run `jscope`.
+Either needs glibc 2.38 or newer, so Ubuntu 24.04 LTS and later, Debian 13 and
+later. On anything older, build from source.
 
-Needs glibc 2.38 or newer, so Ubuntu 24.04 LTS and later, Debian 13 and later.
-On anything older, build from source.
-
-**Windows** — download `jscope-0.1.3-win64.zip` from the same place, unzip, run
-`jscope.exe`. Read `INSTALL.txt` first: WinUSB has to be bound to `0783:5725`
-with [Zadig](https://zadig.akeo.ie) before the scope can be opened, and that
-displaces Hantek's own driver until you put it back.
+**Windows** — download `jscope-<version>-setup.exe` and run it. Tick "Install
+the USB driver" and it binds WinUSB to `0783:5725` for you (Windows asks for an
+administrator's permission for that step). Binding WinUSB displaces Hantek's own
+driver until you put it back — `README.txt` in the install folder says how. jscope
+updates itself on Windows too.
 
 ## Building
 

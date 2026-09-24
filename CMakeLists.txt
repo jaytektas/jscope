@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(jscope VERSION 0.1.3 LANGUAGES CXX)
+project(jscope VERSION 0.1.4 LANGUAGES CXX)
 
 # windres, for the Windows icon and version resource. Enabled only where it
 # exists -- a Linux build has no use for it and asking for it would fail.
@@ -140,6 +140,13 @@ endfunction()
 
 scope_app(jscope ${CMAKE_CURRENT_SOURCE_DIR}/apps/scope1008/main.cpp
                  "${SCOPE1008_DRIVER_SRC}" ${CMAKE_CURRENT_SOURCE_DIR}/apps/scope1008)
+# The udev rule, read from the ONE copy in packaging/ at configure time, so the rule jscope installs for
+# itself is always the rule the .deb ships.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/packaging/60-hantek-1008c.rules)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/packaging/60-hantek-1008c.rules JSCOPE_UDEV_RULE)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/apps/scope1008/JHantek1008UdevRule.h.in
+               ${CMAKE_CURRENT_BINARY_DIR}/generated/JHantek1008UdevRule.h @ONLY)
+target_include_directories(jscope PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 # No -Wa,-mbig-obj here. Translation units stay small by construction; if that
 # flag is ever needed it is a bug report about the structure, not a fix.
 

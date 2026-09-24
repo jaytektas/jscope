@@ -16,6 +16,8 @@
 // this program. If not, see <https://www.gnu.org/licenses/>.
 
 #include "app/JScopeApp.h"
+#include "drivers/JHantek1008Tables.h"
+#include "JHantek1008UdevRule.h"
 #include "scope/JScopeLog.h"
 
 #include <j/core/Log.h>
@@ -81,6 +83,8 @@ int main(int argc, char** argv) {
     std::signal(SIGTERM, onTerminateSignal);
 
     JScopeApp::setApplicationName("scope1008");
+    JScopeApp::setUsbRule(JUdevRule("60-hantek-1008c.rules", kHantek1008UdevRule, { "0783", "5725" }),
+                          JHantek1008Tables::kVendorId, JHantek1008Tables::kProductId);
 
     JScopeApp app;
     if (!app.valid()) {
