@@ -16,7 +16,7 @@ enable_testing()
 add_custom_target(scope_tests COMMENT "build every scope test binary")
 
 #   cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=$HOME/jframework-sdk
-find_package(JFramework 0.1 CONFIG REQUIRED)
+find_package(JFramework 0.2 CONFIG REQUIRED)   # 0.2: the rebuilt file chooser — an older SDK is refused, not shipped
 # libj_platform.a is a static archive, so it exports none of its own private
 # dependencies — JHttpClient's OpenSSL among them. The application links them
 # WHERE THEY EXIST: a static archive only yields the objects something actually
