@@ -72,7 +72,8 @@ file(GLOB SCOPE_SHELL_SRC   CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/ap
 # Split out so tests can link it without dragging in the window, and so it is
 # compiled once rather than once per test binary.
 set(SCOPE_SHELL_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/app/JScopeActions.cpp
-                         ${CMAKE_CURRENT_SOURCE_DIR}/src/app/JScopeSettings.cpp)
+                         ${CMAKE_CURRENT_SOURCE_DIR}/src/app/JScopeSettings.cpp
+                         ${CMAKE_CURRENT_SOURCE_DIR}/src/app/JScopeBusCommands.cpp)
 list(REMOVE_ITEM SCOPE_SHELL_SRC ${SCOPE_SHELL_CORE_SRC})
 
 # PRECOMPILED HEADERS. The framework's core header pulls ~372 files behind it, so
@@ -192,6 +193,7 @@ scope_test(test_decimator)
 scope_test(test_registry)
 scope_test(test_synthetic_stability)
 scope_test(test_actions)
+scope_test(test_bus_commands)
 scope_test(test_measurements)
 scope_test(test_cursor_model)
 scope_test(test_capture_roundtrip)

@@ -22,6 +22,7 @@
 
 #include <j/core/Log.h>
 #include <csignal>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -47,6 +48,14 @@ void configureLogging(int argc, char** argv) {
                 << "trace logging enabled for '" << category << "'";
         } else if (arg == "--device" && i + 1 < argc) {
             JScopeApp::preferDriver(argv[++i]);
+        } else if (arg == "--ai-bus") {
+            // The window reads JF_AI_BUS as it is built, so this has to be in the
+            // environment before the application exists. See docs/ai-bus.md.
+#if defined(_WIN32)
+            _putenv_s("JF_AI_BUS", "1");
+#else
+            setenv("JF_AI_BUS", "1", 1);
+#endif
         } else if (arg == "--quiet" || arg == "-q") {
             JLog::instance().setGlobalLevel(JLogLevel::Warn);
         }

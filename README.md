@@ -30,6 +30,9 @@ cross-compiles to Windows.
 - **Capture and replay** to a `.jscope` container, so a session can be recorded
   and scrubbed with no hardware attached.
 - **Floating, dockable panels**, including tear-out from the centre.
+- **Scriptable over the AI bus.** `jscope --ai-bus`, then `jf-busctl call
+  "<verb>"`: every setting and action in the window, measurements, and the
+  edge times of any channel as JSON — see [docs/ai-bus.md](docs/ai-bus.md).
 
 ## Installing
 

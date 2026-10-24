@@ -4,6 +4,7 @@
 #pragma once
 
 #include "JScopeActions.h"
+#include "JScopeAiBus.h"
 #include "JScopeDockLayout.h"
 #include "JScopeSettings.h"
 #include "capture/JCaptureWriter.h"
@@ -115,6 +116,8 @@ public:
     bool startRecording(const std::string& path);
     void stopRecording();
     bool isRecording() const { return m_writer.isOpen(); }
+    const std::string& recordingPath() const { return m_recordingPath; }
+    uint64_t framesRecorded() const { return m_writer.framesWritten(); }
 
     // Open a .jscope capture as the current device. Closes whatever is open.
     bool openCapture(const std::string& path);
@@ -160,6 +163,10 @@ private:
     std::unique_ptr<JScopeDockLayout> m_docks;
     JScopeSettings                    m_settings;
     JCaptureWriter                    m_writer;
+    std::string                       m_recordingPath;
+    // The AI bus's own verbs (jf-busctl call). Built last, once everything it
+    // reaches exists; does nothing unless the bus is on.
+    std::unique_ptr<JScopeAiBus>      m_aiBus;
     std::unique_ptr<JFrameTimer>      m_shutdownPoll;
     // jscope's own updates, from its GitHub releases: checked at startup, on Help > Check for Updates,
     // and installed as the window closes.

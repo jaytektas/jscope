@@ -189,6 +189,9 @@ JScopeApp::JScopeApp(std::string settingsPath) : m_settings(std::move(settingsPa
         return ss.str();
     });
 
+    m_aiBus = std::make_unique<JScopeAiBus>(*this);
+    m_aiBus->install();
+
     JLOGC(JScopeLog::kUi, JLogLevel::Info) << "window and shell constructed";
 }
 
@@ -289,6 +292,7 @@ bool JScopeApp::startRecording(const std::string& path) {
         std::filesystem::path(path).parent_path(), ec);
 
     if (!m_writer.open(path, JCaptureWriter::metaFrom(*d))) return false;
+    m_recordingPath = path;
     m_window->showStatus("recording to " + path, kRefusalNoticeMs);
     return true;
 }
